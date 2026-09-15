@@ -239,11 +239,24 @@ class ProfileRepository {
         plan_name: planName,
         start_date: planRow.start_date,
         end_date: planRow.end_date,
-        is_active: Boolean(planRow.is_active),
+        is_active: planRow.is_active,
         remaining_interests: planRow.remaining_interests
       };
 
-      isExpired = !(today >= planRow.start_date && today <= planRow.end_date);
+      // isExpired = !(today >= planRow.start_date && today <= planRow.end_date);
+
+      const CURRENT_DATE = new Date().toISOString().split("T")[0];
+
+      const startDate = new Date(planRow.start_date)
+        .toISOString()
+        .split("T")[0];
+
+      const endDate = new Date(planRow.end_date)
+        .toISOString()
+        .split("T")[0];
+
+      isExpired = !(CURRENT_DATE >= startDate && CURRENT_DATE <= endDate);
+
       if (!isExpired && planRow.remaining_interests > 0) {
         canView = true;
         needsUpgrade = false;
