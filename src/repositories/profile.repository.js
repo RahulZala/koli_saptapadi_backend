@@ -270,7 +270,7 @@ class ProfileRepository {
         last_name: (user.last_name || "").trim(),
         phone: user.phone,
         profile: userDoc ? userDoc.profile : null,
-        is_verified: Boolean(user.is_verified)
+        is_verified: user.is_verified
       },
       plan,
       permissions: {
