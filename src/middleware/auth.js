@@ -47,7 +47,7 @@ async function authenticateUser(req, res, next) {
 
     const user = rows[0];
 
-    if (parseInt(user.is_active, 10) === 0) {
+    if (!user.is_active) {
       return res.status(200).json({
         status: false,
         message: "Your account is deactivated. Please contact support."

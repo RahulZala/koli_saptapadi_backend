@@ -16,7 +16,7 @@ class ProfileService {
 
     if (
       row &&
-      parseInt(row.is_verified, 10) === 1 &&
+      row.is_verified &&
       row.first_name &&
       row.last_name &&
       row.gender &&

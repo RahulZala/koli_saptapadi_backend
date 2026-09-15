@@ -27,7 +27,7 @@ class AuthService {
       return { success: 0, message: "Invalid email or password" };
     }
 
-    if (parseInt(user.is_active, 10) === 0) {
+    if (!user.is_active) {
       return { success: 0, message: "Your account is deactivated. Please contact support." };
     }
 
@@ -78,7 +78,7 @@ class AuthService {
 
     if (user) {
       userId = user.id;
-      if (parseInt(user.is_active, 10) === 0) {
+      if (!user.is_active) {
         return { success: 0, message: "Your account is deactivated. Please contact support 9760975757." };
       }
     } else {
@@ -90,12 +90,16 @@ class AuthService {
     const token = crypto.randomBytes(32).toString("hex");
     await userRepository.updateTokenAndVerify(userId, token);
 
+    const profileService = require("./profile.service");
+    const profileCompletion = await profileService.getProfileCompletion(userId);
+
     return {
       success: 1,
       message: "OTP verified successfully",
       data: {
         user_id: userId,
-        token
+        token,
+        profile_completion: profileCompletion
       }
     };
   }

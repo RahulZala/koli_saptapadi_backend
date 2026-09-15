@@ -38,7 +38,6 @@ const apiRoutes = [
 ];
 
 apiRoutes.forEach(router => {
-  app.use("/api/calls", router);
   app.use("/api", router);
 });
 
