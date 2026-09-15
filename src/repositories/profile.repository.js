@@ -155,9 +155,10 @@ class ProfileRepository {
   async getUserRow(userId, table) {
     if (table === "users") {
       const [rows] = await pool.execute(
-        "SELECT first_name, last_name, gender, email, dob, profile_for, phone, sub_caste FROM users WHERE id = $1",
+        "SELECT first_name, last_name, gender, email, TO_CHAR(dob, 'YYYY-MM-DD') AS dob, profile_for, phone, sub_caste FROM users WHERE id = $1",
         [userId]
       );
+
       return rows[0] || null;
     } else if (table === "physical_details") {
       const [rows] = await pool.execute(

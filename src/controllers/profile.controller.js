@@ -3,8 +3,8 @@ const profileService = require("../services/profile.service");
 class ProfileController {
   async getProfileData(req, res, next) {
     try {
-      const { table } = req.body;
-      const result = await profileService.getUserRow(req.userId, table || "users");
+      const { type } = req.body;
+      const result = await profileService.getUserRow(req.userId, type || "users");
       return res.status(200).json(result);
     } catch (err) {
       next(err);
