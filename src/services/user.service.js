@@ -13,7 +13,7 @@ class UserService {
     );
 
     if (userRows.length === 0) {
-      return { success: false, message: "User not found" };
+      return { success: 0, message: "User not found" };
     }
 
     const gender = userRows[0].gender;
@@ -116,7 +116,7 @@ class UserService {
     }
 
     return {
-      success: true,
+      success: 1,
       data: {
         page,
         total: profiles.length,
@@ -127,12 +127,12 @@ class UserService {
 
   async reportUser(fromUserId, toUserId, reason) {
     if (!reason) {
-      return { success: false, message: "Reason for reporting is required" };
+      return { success: 0, message: "Reason for reporting is required" };
     }
 
     const existingCount = await userRepository.getReportsCount(fromUserId, toUserId);
     if (existingCount > 0) {
-      return { success: false, message: "You already reported this user" };
+      return { success: 0, message: "You already reported this user" };
     }
 
     await userRepository.createReport(fromUserId, toUserId, reason);
@@ -143,7 +143,7 @@ class UserService {
     }
 
     return {
-      success: true,
+      success: 1,
       message: "Thanks for reporting. We’ll review this profile shortly."
     };
   }

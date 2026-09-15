@@ -35,7 +35,7 @@ class CloudinaryService {
     if (!Array.isArray(newImages)) newImages = [];
 
     if (existingImages.length + newImages.length > 5) {
-      return { success: false, message: "Maximum 5 images are allowed" };
+      return { success: 0, message: "Maximum 5 images are allowed" };
     }
 
     // 1. Fetch current DB photos
@@ -91,7 +91,7 @@ class CloudinaryService {
     }
 
     if (errors.length > 0 && uploadedUrls.length === 0) {
-      return { success: false, message: "Invalid image(s)", errors };
+      return { success: 0, message: "Invalid image(s)", errors };
     }
 
     const [finalPhotos] = await pool.execute(
@@ -100,7 +100,7 @@ class CloudinaryService {
     );
 
     return {
-      success: true,
+      success: 1,
       message: "Images updated successfully",
       data: finalPhotos
     };
@@ -117,7 +117,7 @@ class CloudinaryService {
     if (!vBack.ok) errors.back_side = vBack.error;
 
     if (Object.keys(errors).length > 0) {
-      return { success: false, message: "Invalid image(s)", errors };
+      return { success: 0, message: "Invalid image(s)", errors };
     }
 
     let profileUrl = "", frontUrl = "", backUrl = "";
@@ -153,7 +153,7 @@ class CloudinaryService {
     await pool.execute("UPDATE users SET document = 1 WHERE id = $1", [userId]);
 
     return {
-      success: true,
+      success: 0,
       message: "Uploaded successfully"
     };
   }

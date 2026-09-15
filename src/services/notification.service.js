@@ -21,7 +21,7 @@ class NotificationService {
   async getNotifications(userId, page = 1, limit = 10) {
     const data = await notificationRepository.getNotificationList(userId, parseInt(page, 10), parseInt(limit, 10));
     return {
-      success: true,
+      success: 1,
       data
     };
   }

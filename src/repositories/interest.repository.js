@@ -19,14 +19,14 @@ class InterestRepository {
 
   async consumeProfileView(userId) {
     const sub = await this.getActiveSubscription(userId);
-    if (!sub) return { success: false, message: "Subscription expired" };
-    if (sub.remaining_interests <= 0) return { success: false, message: "Interest limit exceeded" };
+    if (!sub) return { success: 0, message: "Subscription expired" };
+    if (sub.remaining_interests <= 0) return { success: 0, message: "Interest limit exceeded" };
 
     await pool.execute(
       "UPDATE user_subscriptions SET remaining_interests = remaining_interests - 1 WHERE id = $1",
       [sub.id]
     );
-    return { success: true };
+    return { success: 1 };
   }
 
   async sendInterest(fromUser, toUser) {

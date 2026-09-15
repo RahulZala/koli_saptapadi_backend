@@ -13,7 +13,7 @@ class RazorpayService {
   async createOrder(userId, planId) {
     const plan = await subscriptionRepository.getPlanById(planId);
     if (!plan) {
-      return { success: false, message: "Invalid plan" };
+      return { success: 0, message: "Invalid plan" };
     }
 
     const planPrice = parseFloat(plan.price);
@@ -31,7 +31,7 @@ class RazorpayService {
       await subscriptionRepository.createPendingOrder(userId, planId, planPrice, order.id);
 
       return {
-        success: true,
+        success: 1,
         data: {
           order_id: order.id,
           amount: amountInPaise,
@@ -41,19 +41,19 @@ class RazorpayService {
       };
     } catch (err) {
       console.error("Razorpay Order Creation Error:", err);
-      return { success: false, message: "Failed to create order" };
+      return { success: 0, message: "Failed to create order" };
     }
   }
 
   async verifyAndSubscribe(userId, orderId, paymentId) {
     const order = await subscriptionRepository.getPendingOrder(orderId, userId);
     if (!order) {
-      return { success: false, message: "Invalid order" };
+      return { success: 0, message: "Invalid order" };
     }
 
     const plan = await subscriptionRepository.getPlanById(order.plan_id);
     if (!plan) {
-      return { success: false, message: "Invalid plan" };
+      return { success: 0, message: "Invalid plan" };
     }
 
     let paymentMethod = "upi";
@@ -68,7 +68,7 @@ class RazorpayService {
     await subscriptionRepository.updatePaymentSuccess(orderId, paymentId, paymentMethod, paymentId);
     await subscriptionRepository.activateOrExtendSubscription(userId, plan.id, plan.validity_days, plan.profile_views);
 
-    return { success: true, message: "Subscribed successfully" };
+    return { success: 1, message: "Subscribed successfully" };
   }
 }
 

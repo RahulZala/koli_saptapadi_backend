@@ -7,11 +7,11 @@ class InterestService {
   async manageInterest(toUserId, fromUserId, action, interestId = null) {
     const sub = await interestRepository.getActiveSubscription(fromUserId);
     if (!sub) {
-      return { success: false, message: "Subscription required" };
+      return { success: 0, message: "Subscription required" };
     }
 
     if (["accept", "reject"].includes(action) && !interestId) {
-      return { success: false, message: "Please share interest person" };
+      return { success: 0, message: "Please share interest person" };
     }
 
     if (action === "send" || action === "accept") {
@@ -25,12 +25,12 @@ class InterestService {
     if (action === "send") {
       const alreadySent = await interestRepository.checkExistingInterest(fromUserId, toUserId);
       if (alreadySent) {
-        return { success: false, message: "Already sent" };
+        return { success: 0, message: "Already sent" };
       }
 
       const consumeRes = await interestRepository.consumeProfileView(fromUserId);
       if (!consumeRes.success) {
-        return { success: false, message: consumeRes.message };
+        return { success: 0, message: consumeRes.message };
       }
 
       const insertId = await interestRepository.sendInterest(fromUserId, toUserId);
@@ -48,11 +48,11 @@ class InterestService {
         insertId
       );
 
-      return { success: true, message: "Interest sent successfully" };
+      return { success: 1, message: "Interest sent successfully" };
     } else if (action === "accept") {
       const interest = await interestRepository.getInterestById(interestId, fromUserId);
       if (!interest || interest.status !== "pending") {
-        return { success: false, message: "Invalid interest" };
+        return { success: 0, message: "Invalid interest" };
       }
 
       await interestRepository.updateInterestStatus(interestId, "accepted");
@@ -75,11 +75,11 @@ class InterestService {
         interestId
       );
 
-      return { success: true, message: "Interest accepted successfully" };
+      return { success: 1, message: "Interest accepted successfully" };
     } else if (action === "reject") {
       const interest = await interestRepository.getInterestById(interestId, fromUserId);
       if (!interest || interest.status !== "pending") {
-        return { success: false, message: "Invalid interest" };
+        return { success: 0, message: "Invalid interest" };
       }
 
       await interestRepository.updateInterestStatus(interestId, "rejected");
@@ -96,10 +96,10 @@ class InterestService {
         interestId
       );
 
-      return { success: true, message: "Interest rejected successfully" };
+      return { success: 1, message: "Interest rejected successfully" };
     }
 
-    return { success: false, message: "Invalid action" };
+    return { success: 0, message: "Invalid action" };
   }
 
   async getInterests(userId, type) {
@@ -110,7 +110,7 @@ class InterestService {
     }));
 
     return {
-      success: true,
+      success: 1,
       data: { profiles: data }
     };
   }
