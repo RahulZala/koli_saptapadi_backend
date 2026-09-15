@@ -7,12 +7,12 @@ const { getExpiryDateTimeMinutes } = require("../utils/dates");
 class AuthService {
   async login(email, password) {
     if (!email || !password) {
-      return { success: false, message: "Email and password are required" };
+      return { success: 0, message: "Email and password are required" };
     }
 
     const user = await userRepository.findByEmail(email);
     if (!user) {
-      return { success: false, message: "Invalid email or password" };
+      return { success: 0, message: "Invalid email or password" };
     }
 
     // Verify bcrypt password hash compatible with PHP password_hash()
@@ -24,16 +24,16 @@ class AuthService {
     }
 
     if (!isValid) {
-      return { success: false, message: "Invalid email or password" };
+      return { success: 0, message: "Invalid email or password" };
     }
 
     if (parseInt(user.is_active, 10) === 0) {
-      return { success: false, message: "Your account is deactivated. Please contact support." };
+      return { success: 0, message: "Your account is deactivated. Please contact support." };
     }
 
     delete user.password;
     return {
-      success: true,
+      success: 1,
       message: "Login successful",
       data: user
     };
@@ -41,7 +41,7 @@ class AuthService {
 
   async sendOTP(phone) {
     if (!phone) {
-      return { success: false, message: "Phone number required" };
+      return { success: 0, message: "Phone number required" };
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -49,7 +49,7 @@ class AuthService {
 
     await userRepository.createOTP(phone, otp, expiresAt);
     return {
-      success: true,
+      success: 1,
       message: "OTP sent successfully",
       data: { otp }
     };
@@ -57,18 +57,18 @@ class AuthService {
 
   async verifyOTP(phone, otp) {
     if (!phone || !otp) {
-      return { success: false, message: "Phone and OTP are required" };
+      return { success: 0, message: "Phone and OTP are required" };
     }
 
     const record = await userRepository.findLatestOTP(phone, otp);
     if (!record) {
-      return { success: false, message: "Invalid OTP" };
+      return { success: 0, message: "Invalid OTP" };
     }
 
     const now = new Date();
     const expiryDate = new Date(record.expires_at);
     if (expiryDate < now) {
-      return { success: false, message: "OTP expired" };
+      return { success: 0, message: "OTP expired" };
     }
 
     await userRepository.markOTPUsed(record.id);
@@ -79,7 +79,7 @@ class AuthService {
     if (user) {
       userId = user.id;
       if (parseInt(user.is_active, 10) === 0) {
-        return { success: false, message: "Your account is deactivated. Please contact support 9760975757." };
+        return { success: 0, message: "Your account is deactivated. Please contact support 9760975757." };
       }
     } else {
       userId = await userRepository.createUserFromPhone(phone);
@@ -91,7 +91,7 @@ class AuthService {
     await userRepository.updateTokenAndVerify(userId, token);
 
     return {
-      success: true,
+      success: 1,
       message: "OTP verified successfully",
       data: {
         user_id: userId,
@@ -102,12 +102,12 @@ class AuthService {
 
   async logout(userId) {
     await userRepository.clearTokens(userId);
-    return { success: true, message: "User logged out successfully" };
+    return { success: 1, message: "User logged out successfully" };
   }
 
   async deleteAccount(userId) {
     await userRepository.deactivateUser(userId);
-    return { success: true, message: "User account deleted successfully" };
+    return { success: 1, message: "User account deleted successfully" };
   }
 }
 

@@ -73,27 +73,27 @@ class ProfileService {
   async updateBasicDetails(userId, data) {
     const { first_name, gender, dob, profile_for } = data;
     if (!first_name || !gender || !dob || !profile_for) {
-      return { success: false, message: "Required fields missing" };
+      return { success: 0, message: "Required fields missing" };
     }
 
     await profileRepository.updateBasicDetails(userId, data);
-    return { success: true, message: "Basic details updated successfully" };
+    return { success: 1, message: "Basic details updated successfully" };
   }
 
   async addFamilyDetails(userId, data) {
     const { father_name, mother_name, siblings, father_occupations, family_type } = data;
     if (!father_name || !mother_name || siblings < 0 || !father_occupations || !family_type) {
-      return { success: false, message: "Required fields missing" };
+      return { success: 0, message: "Required fields missing" };
     }
 
     await profileRepository.saveFamilyDetails(userId, data);
-    return { success: true, message: "Family details saved successfully" };
+    return { success: 1, message: "Family details saved successfully" };
   }
 
   async addPhysicalDetails(userId, data) {
     const { height, weight } = data;
     if (!height || parseFloat(weight) <= 0) {
-      return { success: false, message: "Height & weight required" };
+      return { success: 0, message: "Height & weight required" };
     }
 
     const allowedManglik = ["yes", "no", "dont_know"];
@@ -103,28 +103,28 @@ class ProfileService {
     data.thalassemia_status = allowedThal.includes(data.thalassemia_status) ? data.thalassemia_status : "dont_know";
 
     await profileRepository.savePhysicalDetails(userId, data);
-    return { success: true, message: "Physical details saved successfully" };
+    return { success: 1, message: "Physical details saved successfully" };
   }
 
   async addOrUpdateAddress(userId, data) {
     const { address_type, address_line, state_id, district_id, city_id } = data;
 
     if (!["current", "permanent"].includes(address_type)) {
-      return { success: false, message: "Invalid address type" };
+      return { success: 0, message: "Invalid address type" };
     }
 
     if (!state_id || !district_id || !city_id || !address_line) {
-      return { success: false, message: "Invalid address data" };
+      return { success: 0, message: "Invalid address data" };
     }
 
     const action = await profileRepository.saveAddress(userId, data);
-    return { success: true, action };
+    return { success: 1, action };
   }
 
   async addMaritalProfessionalDetails(userId, data) {
     const action = await profileRepository.saveMaritalProfessionalDetails(userId, data);
     return {
-      success: true,
+      success: 1,
       message: `Marital & professional details ${action} successfully`
     };
   }
@@ -133,25 +133,25 @@ class ProfileService {
     const { age_min, age_max, height_min, height_max, weight_min, weight_max } = data;
 
     if (age_min !== null && age_max !== null && age_min > age_max) {
-      return { success: false, message: "age_min cannot be greater than age_max" };
+      return { success: 0, message: "age_min cannot be greater than age_max" };
     }
     if (height_min !== null && height_max !== null && height_min > height_max) {
-      return { success: false, message: "height_min cannot be greater than height_max" };
+      return { success: 0, message: "height_min cannot be greater than height_max" };
     }
     if (weight_min !== null && weight_max !== null && weight_min > weight_max) {
-      return { success: false, message: "weight_min cannot be greater than weight_max" };
+      return { success: 0, message: "weight_min cannot be greater than weight_max" };
     }
 
     const action = await profileRepository.savePartnerPreferences(userId, data);
     return {
-      success: true,
+      success: 1,
       message: `Partner preferences ${action} successfully`
     };
   }
 
   async getUserRow(userId, table) {
     const data = await profileRepository.getUserRow(userId, table);
-    return { success: true, data };
+    return { success: 1, data };
   }
 
   async getCompleteProfile(userId, fcmToken = null) {
@@ -160,16 +160,16 @@ class ProfileService {
     }
     const profileData = await profileRepository.getCompleteProfile(userId);
     if (!profileData) {
-      return { success: false, message: "User not found" };
+      return { success: 0, message: "User not found" };
     }
-    return { success: true, data: profileData };
+    return { success: 1, data: profileData };
   }
 
   async getPartnerProfile(userId, profileUserId) {
     const hasAccepted = await interestRepository.hasAcceptedInterest(userId, profileUserId);
     if (!hasAccepted) {
       return {
-        success: false,
+        success: 0,
         message: "Access denied. You have not accepted interest from this profile."
       };
     }
@@ -177,13 +177,13 @@ class ProfileService {
     const sub = await interestRepository.getActiveSubscription(userId);
     if (!sub) {
       return {
-        success: false,
+        success: 0,
         message: "Subscription expired. Please subscribe to view partner profiles."
       };
     }
 
     if (sub.remaining_interests <= 0) {
-      return { success: false, message: "Profile view limit exceeded" };
+      return { success: 0, message: "Profile view limit exceeded" };
     }
 
     const [rows] = await pool.execute(
@@ -207,7 +207,7 @@ class ProfileService {
     );
 
     if (rows.length === 0) {
-      return { success: false, message: "User not found" };
+      return { success: 0, message: "User not found" };
     }
 
     const data = rows[0];
@@ -217,7 +217,7 @@ class ProfileService {
     );
     data.images = photoRows.map((p) => p.image_url);
 
-    return { success: true, data };
+    return { success: 1, data };
   }
 
   async getImages(userId) {
@@ -226,7 +226,7 @@ class ProfileService {
       [userId]
     );
     const images = rows.map((r) => r.image_url);
-    return { success: true, data: { profile: images } };
+    return { success: 1, data: { profile: images } };
   }
 }
 
