@@ -239,7 +239,7 @@ class ProfileRepository {
         plan_name: planName,
         start_date: planRow.start_date,
         end_date: planRow.end_date,
-        is_active: planRow.is_active,
+        is_active: Boolean(planRow.is_active),
         remaining_interests: planRow.remaining_interests
       };
 
