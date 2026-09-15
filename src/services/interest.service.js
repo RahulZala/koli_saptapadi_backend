@@ -17,7 +17,7 @@ class InterestService {
     if (action === "send" || action === "accept") {
       // Record profile view
       await pool.execute(
-        "INSERT INTO profile_views (user_id, viewed_user_id) VALUES (?, ?)",
+        "INSERT INTO profile_views (user_id, viewed_user_id) VALUES ($1, $2)",
         [fromUserId, toUserId]
       );
     }
@@ -59,7 +59,7 @@ class InterestService {
 
       // Deduct interest view count from receiver
       await pool.execute(
-        "UPDATE user_subscriptions SET remaining_interests = remaining_interests - 1 WHERE user_id = ? AND remaining_interests > 0 AND is_active = 1",
+        "UPDATE user_subscriptions SET remaining_interests = remaining_interests - 1 WHERE user_id = $1 AND remaining_interests > 0 AND is_active = 1",
         [toUserId]
       );
 

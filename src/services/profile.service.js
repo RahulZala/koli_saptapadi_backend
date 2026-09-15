@@ -9,7 +9,7 @@ class ProfileService {
     const sections = {};
 
     const [userRows] = await pool.execute(
-      "SELECT first_name, last_name, gender, dob, is_verified FROM users WHERE id = ?",
+      "SELECT first_name, last_name, gender, dob, is_verified FROM users WHERE id = $1",
       [userId]
     );
     const row = userRows[0] || null;
@@ -189,7 +189,7 @@ class ProfileService {
     const [rows] = await pool.execute(
       `SELECT 
         u.id, u.first_name, u.last_name, u.sub_caste, u.email, u.gender, u.dob, u.phone, u.profile_for,
-        TIMESTAMPDIFF(YEAR, u.dob, CURDATE()) AS age,
+        EXTRACT(YEAR FROM age(CURRENT_DATE, u.dob)) AS age,
         pd.height, pd.weight, pd.smoking, pd.drinking, pd.diet, pd.is_disabled, pd.disability_details, pd.languages_known, pd.manglik, pd.marital_status, pd.thalassemia_status,
         fd.father_name, fd.mother_name, fd.maternal_surname, fd.siblings, fd.family_type, fd.father_occupations,
         mpd.highest_degree, mpd.university_name, mpd.degree, mpd.annual_income, mpd.occupation, mpd.work_city,
@@ -202,7 +202,7 @@ class ProfileService {
       LEFT JOIN marital_professional_details mpd ON mpd.user_id = u.id
       LEFT JOIN partner_preferences pp ON pp.user_id = u.id
       LEFT JOIN user_document ud ON ud.user_id = u.id
-      WHERE u.id = ? AND u.is_verified = 1`,
+      WHERE u.id = $1 AND u.is_verified = 1`,
       [profileUserId]
     );
 
@@ -212,7 +212,7 @@ class ProfileService {
 
     const data = rows[0];
     const [photoRows] = await pool.execute(
-      "SELECT image_url FROM user_photos WHERE user_id = ? ORDER BY id ASC",
+      "SELECT image_url FROM user_photos WHERE user_id = $1 ORDER BY id ASC",
       [profileUserId]
     );
     data.images = photoRows.map((p) => p.image_url);
@@ -222,7 +222,7 @@ class ProfileService {
 
   async getImages(userId) {
     const [rows] = await pool.execute(
-      "SELECT image_url FROM user_photos WHERE user_id = ?",
+      "SELECT image_url FROM user_photos WHERE user_id = $1",
       [userId]
     );
     const images = rows.map((r) => r.image_url);
