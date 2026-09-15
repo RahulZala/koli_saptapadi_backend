@@ -40,7 +40,7 @@ class CloudinaryService {
 
     // 1. Fetch current DB photos
     const [dbPhotos] = await pool.execute(
-      "SELECT id, image_url FROM user_photos WHERE user_id = ? ORDER BY id ASC",
+      "SELECT id, image_url FROM user_photos WHERE user_id = $1 ORDER BY id ASC",
       [userId]
     );
 
@@ -52,7 +52,7 @@ class CloudinaryService {
     for (const dbPhoto of dbPhotos) {
       const filename = dbPhoto.image_url.split("/").pop();
       if (!keepFilenames.includes(filename)) {
-        await pool.execute("DELETE FROM user_photos WHERE id = ? AND user_id = ?", [dbPhoto.id, userId]);
+        await pool.execute("DELETE FROM user_photos WHERE id = $1 AND user_id = $2", [dbPhoto.id, userId]);
       }
     }
 
@@ -76,12 +76,11 @@ class CloudinaryService {
           const res = await this.uploadBuffer(valid.buffer, `user_photos/${userId}`, publicId);
           imageUrl = res.secure_url;
         } else {
-          // Fallback mock URL if Cloudinary credentials not configured yet
           imageUrl = `https://res.cloudinary.com/demo/image/upload/v1/user_photos/${userId}/${publicId}.${valid.ext}`;
         }
 
         await pool.execute(
-          "INSERT INTO user_photos (user_id, image_url, created_at) VALUES (?, ?, NOW())",
+          "INSERT INTO user_photos (user_id, image_url, created_at) VALUES ($1, $2, CURRENT_TIMESTAMP)",
           [userId, imageUrl]
         );
         uploadedUrls.push(imageUrl);
@@ -96,7 +95,7 @@ class CloudinaryService {
     }
 
     const [finalPhotos] = await pool.execute(
-      "SELECT id, image_url FROM user_photos WHERE user_id = ? ORDER BY id ASC",
+      "SELECT id, image_url FROM user_photos WHERE user_id = $1 ORDER BY id ASC",
       [userId]
     );
 
@@ -137,21 +136,21 @@ class CloudinaryService {
       backUrl = `https://res.cloudinary.com/demo/image/upload/v1/${folder}/back.${vBack.ext}`;
     }
 
-    const [existing] = await pool.execute("SELECT id FROM user_document WHERE user_id = ?", [userId]);
+    const [existing] = await pool.execute("SELECT id FROM user_document WHERE user_id = $1", [userId]);
 
     if (existing.length > 0) {
       await pool.execute(
-        "UPDATE user_document SET document_type = ?, profile = ?, front_image = ?, back_image = ? WHERE user_id = ?",
+        "UPDATE user_document SET document_type = $1, profile = $2, front_image = $3, back_image = $4 WHERE user_id = $5",
         [documentType, profileUrl, frontUrl, backUrl, userId]
       );
     } else {
       await pool.execute(
-        "INSERT INTO user_document (user_id, document_type, profile, front_image, back_image) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO user_document (user_id, document_type, profile, front_image, back_image) VALUES ($1, $2, $3, $4, $5)",
         [userId, documentType, profileUrl, frontUrl, backUrl]
       );
     }
 
-    await pool.execute("UPDATE users SET document = 1 WHERE id = ?", [userId]);
+    await pool.execute("UPDATE users SET document = 1 WHERE id = $1", [userId]);
 
     return {
       success: true,

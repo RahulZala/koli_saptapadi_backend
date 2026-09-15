@@ -7,7 +7,7 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "check": "node --check src/server.js",
-    "build": "node --check src/server.js && node --check api/index.js"
+    "build": "node scripts/build.js"
   },
   "keywords": [
     "express",
