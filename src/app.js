@@ -42,8 +42,8 @@ apiRoutes.forEach(router => {
   app.use("/api", router);
 });
 
-// Root & API Healthcheck Endpoints
-app.get(["/health", "/api/health", "/api/calls/health", "/"], async (req, res) => {
+// Root & API Healthcheck Endpoints (supports GET and POST)
+app.all(["/health", "/api/health", "/api/calls/health", "/"], async (req, res) => {
   let dbStatus = "connected";
   let dbError = null;
 
@@ -60,6 +60,12 @@ app.get(["/health", "/api/health", "/api/calls/health", "/"], async (req, res) =
     message: "Koli Saptapadi Express API is running",
     database: dbStatus,
     ...(dbError ? { database_error: dbError } : {}),
+    env_checks: {
+      has_SUPABASE_DATABASE_URL: Boolean(process.env.SUPABASE_DATABASE_URL),
+      has_DATABASE_URL: Boolean(process.env.DATABASE_URL),
+      has_SUPABASE_DB_HOST: Boolean(process.env.SUPABASE_DB_HOST),
+      NODE_ENV: process.env.NODE_ENV || "development"
+    },
     timestamp: new Date().toISOString()
   });
 });
