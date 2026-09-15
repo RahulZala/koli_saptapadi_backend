@@ -31,8 +31,8 @@ class UserService {
       LEFT JOIN user_addresses ua ON ua.user_id = u.id AND ua.address_type = 'current'
       LEFT JOIN user_document up ON up.user_id = u.id 
       WHERE u.gender = $1
-        AND u.is_verified = 1
-        AND u.document = 1
+        AND u.is_verified = true
+        AND u.document = true
         AND u.id != $2
         AND NOT EXISTS (
           SELECT 1 FROM interests i

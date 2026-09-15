@@ -216,7 +216,7 @@ class ProfileRepository {
     const userDoc = docRows[0] || null;
 
     const [subRows] = await pool.execute(
-      "SELECT * FROM user_subscriptions WHERE user_id = $1 AND is_active = 1 ORDER BY id DESC LIMIT 1",
+      "SELECT * FROM user_subscriptions WHERE user_id = $1 AND is_active = true ORDER BY id DESC LIMIT 1",
       [userId]
     );
     const planRow = subRows[0] || null;

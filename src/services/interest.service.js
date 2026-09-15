@@ -59,7 +59,7 @@ class InterestService {
 
       // Deduct interest view count from receiver
       await pool.execute(
-        "UPDATE user_subscriptions SET remaining_interests = remaining_interests - 1 WHERE user_id = $1 AND remaining_interests > 0 AND is_active = 1",
+        "UPDATE user_subscriptions SET remaining_interests = remaining_interests - 1 WHERE user_id = $1 AND remaining_interests > 0 AND is_active = true",
         [toUserId]
       );
 

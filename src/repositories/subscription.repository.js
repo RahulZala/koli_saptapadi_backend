@@ -87,7 +87,7 @@ class SubscriptionRepository {
 
   async activateOrExtendSubscription(userId, planId, validityDays, profileViews) {
     const [subRows] = await pool.execute(
-      "SELECT * FROM user_subscriptions WHERE user_id = $1 AND is_active = 1 AND end_date >= CURRENT_DATE",
+      "SELECT * FROM user_subscriptions WHERE user_id = $1 AND is_active = true AND end_date >= CURRENT_DATE",
       [userId]
     );
 

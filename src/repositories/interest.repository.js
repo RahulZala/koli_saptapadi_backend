@@ -3,7 +3,7 @@ const pool = require("../config/database");
 class InterestRepository {
   async getActiveSubscription(userId) {
     const [rows] = await pool.execute(
-      "SELECT * FROM user_subscriptions WHERE user_id = $1 AND is_active = 1 AND end_date >= CURRENT_DATE",
+      "SELECT * FROM user_subscriptions WHERE user_id = $1 AND is_active = true AND end_date >= CURRENT_DATE",
       [userId]
     );
     return rows[0] || null;

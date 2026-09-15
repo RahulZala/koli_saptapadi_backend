@@ -150,7 +150,7 @@ class CloudinaryService {
       );
     }
 
-    await pool.execute("UPDATE users SET document = 1 WHERE id = $1", [userId]);
+    await pool.execute("UPDATE users SET document = true WHERE id = $1", [userId]);
 
     return {
       success: 0,
