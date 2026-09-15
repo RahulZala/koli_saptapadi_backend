@@ -34,7 +34,7 @@ async function authenticateUser(req, res, next) {
     }
 
     const [rows] = await pool.execute(
-      "SELECT id, is_active, phone, first_name, last_name FROM users WHERE api_token = ?",
+      "SELECT id, is_active, phone, first_name, last_name FROM users WHERE api_token = $1",
       [token]
     );
 

@@ -20,11 +20,7 @@ function getCurrentDateTime() {
 }
 
 function getExpiryDateTimeMinutes(minutes = 5) {
-  const now = new Date();
-  const kolkataOffsetMs = 5.5 * 60 * 60 * 1000;
-  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-  const kolkataTime = new Date(utc + kolkataOffsetMs + (minutes * 60000));
-  return kolkataTime.toISOString().slice(0, 19).replace("T", " ");
+  return new Date(Date.now() + minutes * 60 * 1000);
 }
 
 function timeAgo(datetimeStr) {

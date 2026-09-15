@@ -54,7 +54,7 @@ class ProfileRepository {
       );
     }
 
-    await pool.execute("UPDATE users SET family_completed = 1 WHERE id = $1", [userId]);
+    await pool.execute("UPDATE users SET family_completed = true WHERE id = $1", [userId]);
   }
 
   async savePhysicalDetails(userId, data) {
@@ -76,7 +76,7 @@ class ProfileRepository {
       );
     }
 
-    await pool.execute("UPDATE users SET physical_completed = 1 WHERE id = $1", [userId]);
+    await pool.execute("UPDATE users SET physical_completed = true WHERE id = $1", [userId]);
   }
 
   async saveAddress(userId, data) {
@@ -101,7 +101,7 @@ class ProfileRepository {
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [userId, address_type, address_line, landmark, state_id, district_id, city_id, pincode]
       );
-      await pool.execute("UPDATE users SET address_completed = 1 WHERE id = $1", [userId]);
+      await pool.execute("UPDATE users SET address_completed = true WHERE id = $1", [userId]);
       return "inserted";
     }
   }
@@ -124,7 +124,7 @@ class ProfileRepository {
         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [userId, highest_degree, occupation, annual_income, university, work_city, degree]
       );
-      await pool.execute("UPDATE users SET marital_professional_completed = 1 WHERE id = $1", [userId]);
+      await pool.execute("UPDATE users SET marital_professional_completed = true WHERE id = $1", [userId]);
       return "added";
     }
   }
@@ -147,7 +147,7 @@ class ProfileRepository {
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [userId, age_min, age_max, height_min, height_max, weight_min, weight_max, preferred_marital_status, preferred_education, preferred_occupation]
       );
-      await pool.execute("UPDATE users SET partner_preferences_completed = 1 WHERE id = $1", [userId]);
+      await pool.execute("UPDATE users SET partner_preferences_completed = true WHERE id = $1", [userId]);
       return "saved";
     }
   }

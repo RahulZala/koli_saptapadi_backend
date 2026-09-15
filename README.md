@@ -105,6 +105,41 @@ npm run dev
 ```
 The server will start at `http://localhost:3000`.
 
+### 4. Test Locally with Postman
+
+Use this base URL in Postman:
+
+```text
+http://localhost:3000/api/calls
+```
+
+Example public request:
+
+```http
+GET http://localhost:3000/api/calls/get_states
+```
+
+Example login request:
+
+```http
+POST http://localhost:3000/api/calls/login
+Content-Type: application/json
+```
+
+In Postman, select **Body > raw > JSON** and provide the request body required by the endpoint. Authenticated endpoints require the token returned by login or OTP verification:
+
+```text
+Authorization: Bearer <api_token>
+```
+
+Legacy `.php` URLs are also supported, for example:
+
+```text
+http://localhost:3000/api/calls/get_states.php
+```
+
+Stop the server with `Ctrl+C`. For endpoint-specific request bodies, see [`docs/TESTING.md`](docs/TESTING.md).
+
 ---
 
 ## 📱 Android App Base URL Update

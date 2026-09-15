@@ -12,6 +12,13 @@ function routeAlias(req, res, next) {
     url = url.replace(/\.php(\?.*)?$/, "$1");
   }
 
+  // Exempt health checks and root from rewriting
+  const pathname = url.split("?")[0];
+  if (pathname === "/health" || pathname === "/api/health" || pathname === "/api/calls/health" || pathname === "/") {
+    req.url = url;
+    return next();
+  }
+
   // Handle root level login.php or /api/login
   if (url === "/login" || url.startsWith("/login?")) {
     url = url.replace("/login", "/api/calls/login");

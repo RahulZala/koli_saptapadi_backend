@@ -24,20 +24,44 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 // Route Normalization Alias Middleware for legacy Android endpoint requests
 app.use(routeAlias);
 
-// Mount API Route Handlers
-app.use("/api/calls", authRoutes);
-app.use("/api/calls", userRoutes);
-app.use("/api/calls", profileRoutes);
-app.use("/api/calls", interestRoutes);
-app.use("/api/calls", subscriptionRoutes);
-app.use("/api/calls", locationRoutes);
-app.use("/api/calls", documentRoutes);
-app.use("/api/calls", imageRoutes);
-app.use("/api/calls", notificationRoutes);
+// Mount API Route Handlers (supporting both /api/calls and /api)
+const apiRoutes = [
+  authRoutes,
+  userRoutes,
+  profileRoutes,
+  interestRoutes,
+  subscriptionRoutes,
+  locationRoutes,
+  documentRoutes,
+  imageRoutes,
+  notificationRoutes
+];
 
-// Root Healthcheck Endpoint
-app.get("/health", (req, res) => {
-  res.status(200).json({ status: "OK", timestamp: new Date().toISOString() });
+apiRoutes.forEach(router => {
+  app.use("/api/calls", router);
+  app.use("/api", router);
+});
+
+// Root & API Healthcheck Endpoints
+app.get(["/health", "/api/health", "/api/calls/health", "/"], async (req, res) => {
+  let dbStatus = "connected";
+  let dbError = null;
+
+  try {
+    const pool = require("./config/database");
+    await pool.query("SELECT 1");
+  } catch (err) {
+    dbStatus = "disconnected";
+    dbError = err.message;
+  }
+
+  res.status(200).json({
+    status: true,
+    message: "Koli Saptapadi Express API is running",
+    database: dbStatus,
+    ...(dbError ? { database_error: dbError } : {}),
+    timestamp: new Date().toISOString()
+  });
 });
 
 // 404 Route Handler

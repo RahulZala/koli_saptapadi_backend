@@ -26,7 +26,7 @@ class MasterRepository {
 
   async getSubCastes() {
     const [rows] = await pool.execute(
-      "SELECT id, name FROM sub_castes WHERE is_active = 1"
+      "SELECT id, name FROM sub_castes WHERE is_active = true"
     );
     return rows;
   }

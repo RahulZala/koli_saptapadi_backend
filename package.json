@@ -1,7 +1,7 @@
 {
   "name": "koli-express-api",
   "version": "1.0.0",
-  "description": "Koli Saptapadi Express.js REST API Backend Migration (Supabase PostgreSQL + Cloudinary)",
+  "description": "Koli Saptapadi Express.js REST API Backend (Supabase PostgreSQL + Cloudinary)",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
@@ -30,3 +30,4 @@
     "razorpay": "^2.9.5"
   }
 }
+

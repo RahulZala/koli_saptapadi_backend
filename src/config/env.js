@@ -4,13 +4,19 @@ const env = {
   NODE_ENV: process.env.NODE_ENV || "development",
   PORT: parseInt(process.env.PORT || "3000", 10),
 
-  // Database Connection (Supabase PostgreSQL)
-  DATABASE_URL: process.env.DATABASE_URL || "",
-  DB_HOST: process.env.DB_HOST || "localhost",
-  DB_PORT: parseInt(process.env.DB_PORT || "5432", 10),
-  DB_USER: process.env.DB_USER || "postgres",
-  DB_PASSWORD: process.env.DB_PASSWORD || "",
-  DB_NAME: process.env.DB_NAME || "postgres",
+  // Supabase PostgreSQL connection. DATABASE_URL remains supported for deployment compatibility.
+  SUPABASE_DATABASE_URL: process.env.SUPABASE_DATABASE_URL || process.env.DATABASE_URL || "",
+  SUPABASE_DB_HOST: process.env.SUPABASE_DB_HOST || process.env.DB_HOST || "",
+  SUPABASE_DB_PORT: parseInt(process.env.SUPABASE_DB_PORT || process.env.DB_PORT || "5432", 10),
+  SUPABASE_DB_USER: process.env.SUPABASE_DB_USER || process.env.DB_USER || "postgres",
+  SUPABASE_DB_PASSWORD: process.env.SUPABASE_DB_PASSWORD || process.env.DB_PASSWORD || "",
+  SUPABASE_DB_NAME: process.env.SUPABASE_DB_NAME || process.env.DB_NAME || "postgres",
+  DATABASE_URL: process.env.SUPABASE_DATABASE_URL || process.env.DATABASE_URL || "",
+  DB_HOST: process.env.SUPABASE_DB_HOST || process.env.DB_HOST || "",
+  DB_PORT: parseInt(process.env.SUPABASE_DB_PORT || process.env.DB_PORT || "5432", 10),
+  DB_USER: process.env.SUPABASE_DB_USER || process.env.DB_USER || "postgres",
+  DB_PASSWORD: process.env.SUPABASE_DB_PASSWORD || process.env.DB_PASSWORD || "",
+  DB_NAME: process.env.SUPABASE_DB_NAME || process.env.DB_NAME || "postgres",
   DB_CONNECTION_LIMIT: parseInt(process.env.DB_CONNECTION_LIMIT || "10", 10),
 
   // Cloudinary Storage

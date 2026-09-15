@@ -35,7 +35,7 @@ class UserRepository {
 
   async findLatestOTP(phone, otp) {
     const [rows] = await pool.execute(
-      "SELECT id, expires_at FROM user_otps WHERE phone = $1 AND otp = $2 AND is_used = 0 ORDER BY id DESC LIMIT 1",
+      "SELECT id, expires_at FROM user_otps WHERE phone = $1 AND otp = $2 AND is_used = false ORDER BY id DESC LIMIT 1",
       [phone, otp]
     );
     return rows[0] || null;
@@ -43,14 +43,14 @@ class UserRepository {
 
   async markOTPUsed(otpId) {
     await pool.execute(
-      "UPDATE user_otps SET is_used = 1 WHERE id = $1",
+      "UPDATE user_otps SET is_used = true WHERE id = $1",
       [otpId]
     );
   }
 
   async createUserFromPhone(phone) {
     const [rows] = await pool.execute(
-      "INSERT INTO users (phone, is_verified) VALUES ($1, 1) RETURNING id",
+      "INSERT INTO users (phone, is_verified) VALUES ($1, true) RETURNING id",
       [phone]
     );
     return rows[0] ? rows[0].id : null;
@@ -58,7 +58,7 @@ class UserRepository {
 
   async updateTokenAndVerify(userId, token) {
     await pool.execute(
-      "UPDATE users SET api_token = $1, is_verified = 1 WHERE id = $2",
+      "UPDATE users SET api_token = $1, is_verified = true WHERE id = $2",
       [token, userId]
     );
   }
@@ -79,7 +79,7 @@ class UserRepository {
 
   async deactivateUser(userId) {
     await pool.execute(
-      "UPDATE users SET is_active = 0, fcm_token = NULL, api_token = NULL WHERE id = $1",
+      "UPDATE users SET is_active = false, fcm_token = NULL, api_token = NULL WHERE id = $1",
       [userId]
     );
   }
