@@ -1,35 +1,57 @@
-const cloudinary = require("../config/cloudinary");
+const { PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+const { r2Client, bucketName, publicUrl, isLive } = require("../config/cloudflare");
 const pool = require("../config/database");
 const { validateBase64Image } = require("../utils/validation");
 
-class CloudinaryService {
-  async uploadBuffer(buffer, folder, publicId) {
-    return new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: folder,
-          public_id: publicId,
-          resource_type: "image"
-        },
-        (error, result) => {
-          if (error) return reject(error);
-          resolve(result);
-        }
-      );
-      uploadStream.end(buffer);
-    });
+class CloudflareService {
+  /**
+   * Uploads a Buffer to Cloudflare R2 or returns a debug URL when in test mode.
+   */
+  async uploadBuffer(buffer, key, mimeType = "image/jpeg") {
+    if (isLive && r2Client && bucketName) {
+      const command = new PutObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+        Body: buffer,
+        ContentType: mimeType
+      });
+      await r2Client.send(command);
+
+      const baseUrl = publicUrl ? publicUrl : `https://${bucketName}.r2.dev`;
+      return `${baseUrl}/${key}`;
+    }
+
+    // Debug / Mock Mode
+    const baseUrl = publicUrl || "https://pub-debug-storage.r2.dev";
+    return `${baseUrl}/${key}`;
   }
 
-  async deleteAsset(publicId) {
+  /**
+   * Deletes an object from Cloudflare R2 by key or URL.
+   */
+  async deleteAsset(keyOrUrl) {
+    if (!keyOrUrl || !isLive || !r2Client || !bucketName) return;
+
     try {
-      if (publicId) {
-        await cloudinary.uploader.destroy(publicId);
+      let key = keyOrUrl;
+      if (keyOrUrl.startsWith("http://") || keyOrUrl.startsWith("https://")) {
+        const parsed = new URL(keyOrUrl);
+        key = parsed.pathname.replace(/^\/+/, "");
       }
+
+      const command = new DeleteObjectCommand({
+        Bucket: bucketName,
+        Key: key
+      });
+      await r2Client.send(command);
     } catch (err) {
-      console.error("Cloudinary asset deletion error:", err);
+      console.error("Cloudflare R2 asset deletion error:", err);
     }
   }
 
+  /**
+   * Manages user gallery photos (up to 5 images max)
+   */
   async managePhotos(userId, existingImages = [], newImages = []) {
     if (!Array.isArray(existingImages)) existingImages = [];
     if (!Array.isArray(newImages)) newImages = [];
@@ -53,6 +75,7 @@ class CloudinaryService {
       const filename = dbPhoto.image_url.split("/").pop();
       if (!keepFilenames.includes(filename)) {
         await pool.execute("DELETE FROM user_photos WHERE id = $1 AND user_id = $2", [dbPhoto.id, userId]);
+        await this.deleteAsset(dbPhoto.image_url);
       }
     }
 
@@ -69,15 +92,8 @@ class CloudinaryService {
       }
 
       try {
-        const publicId = `user_${userId}_photo_${Date.now()}_${i}`;
-        let imageUrl = "";
-
-        if (process.env.CLOUDINARY_CLOUD_NAME) {
-          const res = await this.uploadBuffer(valid.buffer, `user_photos/${userId}`, publicId);
-          imageUrl = res.secure_url;
-        } else {
-          imageUrl = `https://res.cloudinary.com/demo/image/upload/v1/user_photos/${userId}/${publicId}.${valid.ext}`;
-        }
+        const key = `user_photos/${userId}/photo_${Date.now()}_${i}.${valid.ext}`;
+        const imageUrl = await this.uploadBuffer(valid.buffer, key, valid.mime);
 
         await pool.execute(
           "INSERT INTO user_photos (user_id, image_url, created_at) VALUES ($1, $2, CURRENT_TIMESTAMP)",
@@ -85,7 +101,7 @@ class CloudinaryService {
         );
         uploadedUrls.push(imageUrl);
       } catch (err) {
-        console.error("Image upload failed:", err);
+        console.error("Cloudflare R2 Image upload failed:", err);
         errors[i] = "upload_failed";
       }
     }
@@ -106,6 +122,9 @@ class CloudinaryService {
     };
   }
 
+  /**
+   * Uploads identity verification documents and profile photo
+   */
   async uploadDocuments(userId, documentType, profileB64, frontB64, backB64) {
     const vProfile = validateBase64Image(profileB64);
     const vFront = validateBase64Image(frontB64);
@@ -120,21 +139,14 @@ class CloudinaryService {
       return { success: 0, message: "Invalid image(s)", errors };
     }
 
-    let profileUrl = "", frontUrl = "", backUrl = "";
-    const folder = `documents/${userId}`;
+    const timestamp = Date.now();
+    const profileKey = `documents/${userId}/profile_${timestamp}.${vProfile.ext}`;
+    const frontKey = `documents/${userId}/front_${timestamp}.${vFront.ext}`;
+    const backKey = `documents/${userId}/back_${timestamp}.${vBack.ext}`;
 
-    if (process.env.CLOUDINARY_CLOUD_NAME) {
-      const pRes = await this.uploadBuffer(vProfile.buffer, folder, "profile");
-      const fRes = await this.uploadBuffer(vFront.buffer, folder, "front");
-      const bRes = await this.uploadBuffer(vBack.buffer, folder, "back");
-      profileUrl = pRes.secure_url;
-      frontUrl = fRes.secure_url;
-      backUrl = bRes.secure_url;
-    } else {
-      profileUrl = `https://res.cloudinary.com/demo/image/upload/v1/${folder}/profile.${vProfile.ext}`;
-      frontUrl = `https://res.cloudinary.com/demo/image/upload/v1/${folder}/front.${vFront.ext}`;
-      backUrl = `https://res.cloudinary.com/demo/image/upload/v1/${folder}/back.${vBack.ext}`;
-    }
+    const profileUrl = await this.uploadBuffer(vProfile.buffer, profileKey, vProfile.mime);
+    const frontUrl = await this.uploadBuffer(vFront.buffer, frontKey, vFront.mime);
+    const backUrl = await this.uploadBuffer(vBack.buffer, backKey, vBack.mime);
 
     const [existing] = await pool.execute("SELECT id FROM user_document WHERE user_id = $1", [userId]);
 
@@ -153,10 +165,16 @@ class CloudinaryService {
     await pool.execute("UPDATE users SET document = true WHERE id = $1", [userId]);
 
     return {
-      success: 0,
-      message: "Uploaded successfully"
+      success: 1,
+      message: "Uploaded successfully",
+      data: {
+        document_type: documentType,
+        profile: profileUrl,
+        front_image: frontUrl,
+        back_image: backUrl
+      }
     };
   }
 }
 
-module.exports = new CloudinaryService();
+module.exports = new CloudflareService();

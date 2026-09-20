@@ -24,6 +24,8 @@ function routeAlias(req, res, next) {
     url = url.replace("/login", "/api/calls/login");
   } else if (url.startsWith("/calls/")) {
     url = "/api" + url;
+  } else if (url.startsWith("/v1/") || url.startsWith("/otp/")) {
+    url = "/api" + (url.startsWith("/") ? url : "/" + url);
   } else if (!url.startsWith("/api/calls/") && !url.startsWith("/api/")) {
     // If sent directly as /send_otp
     url = "/api/calls" + (url.startsWith("/") ? url : "/" + url);

@@ -10,9 +10,13 @@ class UserRepository {
   }
 
   async findByPhone(phone) {
+    if (!phone) return null;
+    const raw = String(phone).trim().replace(/^\+91/, "").replace(/\D/g, "");
+    const withPlus91 = `+91${raw}`;
+    const with91 = `91${raw}`;
     const [rows] = await pool.execute(
-      "SELECT id, is_active FROM users WHERE phone = $1",
-      [phone]
+      "SELECT id, is_active, phone FROM users WHERE phone = $1 OR phone = $2 OR phone = $3 OR phone = $4 LIMIT 1",
+      [phone, raw, withPlus91, with91]
     );
     return rows[0] || null;
   }
@@ -34,9 +38,13 @@ class UserRepository {
   }
 
   async findLatestOTP(phone, otp) {
+    if (!phone || !otp) return null;
+    const raw = String(phone).trim().replace(/^\+91/, "").replace(/\D/g, "");
+    const withPlus91 = `+91${raw}`;
+    const with91 = `91${raw}`;
     const [rows] = await pool.execute(
-      "SELECT id, expires_at FROM user_otps WHERE phone = $1 AND otp = $2 AND is_used = false ORDER BY id DESC LIMIT 1",
-      [phone, otp]
+      "SELECT id, expires_at FROM user_otps WHERE (phone = $1 OR phone = $2 OR phone = $3 OR phone = $4) AND otp = $5 AND is_used = false ORDER BY id DESC LIMIT 1",
+      [phone, raw, withPlus91, with91, String(otp)]
     );
     return rows[0] || null;
   }

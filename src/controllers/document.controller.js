@@ -1,10 +1,10 @@
-const cloudinaryService = require("../services/cloudinary.service");
+const cloudflareService = require("../services/cloudflare.service");
 
 class DocumentController {
   async uploadDocument(req, res, next) {
     try {
       const { document_type, profile, front_side, back_side } = req.body;
-      const result = await cloudinaryService.uploadDocuments(
+      const result = await cloudflareService.uploadDocuments(
         req.userId,
         document_type,
         profile,

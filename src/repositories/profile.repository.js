@@ -87,6 +87,7 @@ class ProfileRepository {
       [userId, address_type]
     );
 
+    let action;
     if (rows.length > 0) {
       await pool.execute(
         `UPDATE user_addresses SET
@@ -94,16 +95,18 @@ class ProfileRepository {
         WHERE user_id = $7 AND address_type = $8`,
         [address_line, landmark, state_id, district_id, city_id, pincode, userId, address_type]
       );
-      return "updated";
+      action = "updated";
     } else {
       await pool.execute(
         `INSERT INTO user_addresses (user_id, address_type, address_line, landmark, state_id, district_id, city_id, pincode)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [userId, address_type, address_line, landmark, state_id, district_id, city_id, pincode]
       );
-      await pool.execute("UPDATE users SET address_completed = true WHERE id = $1", [userId]);
-      return "inserted";
+      action = "inserted";
     }
+
+    await pool.execute("UPDATE users SET address_completed = true WHERE id = $1", [userId]);
+    return action;
   }
 
   async saveMaritalProfessionalDetails(userId, data) {
@@ -133,6 +136,7 @@ class ProfileRepository {
     const { age_min, age_max, height_min, height_max, weight_min, weight_max, preferred_marital_status, preferred_education, preferred_occupation } = data;
     const exists = await this.rowExists("partner_preferences", userId);
 
+    let action;
     if (exists) {
       await pool.execute(
         `UPDATE partner_preferences SET
@@ -140,16 +144,18 @@ class ProfileRepository {
         WHERE user_id = $10`,
         [age_min, age_max, height_min, height_max, weight_min, weight_max, preferred_marital_status, preferred_education, preferred_occupation, userId]
       );
-      return "updated";
+      action = "updated";
     } else {
       await pool.execute(
         `INSERT INTO partner_preferences (user_id, age_min, age_max, height_min, height_max, weight_min, weight_max, preferred_marital_status, preferred_education, preferred_occupation)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [userId, age_min, age_max, height_min, height_max, weight_min, weight_max, preferred_marital_status, preferred_education, preferred_occupation]
       );
-      await pool.execute("UPDATE users SET partner_preferences_completed = true WHERE id = $1", [userId]);
-      return "saved";
+      action = "saved";
     }
+
+    await pool.execute("UPDATE users SET partner_preferences_completed = true WHERE id = $1", [userId]);
+    return action;
   }
 
   async getUserRow(userId, table) {

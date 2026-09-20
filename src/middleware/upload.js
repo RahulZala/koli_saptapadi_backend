@@ -1,6 +1,6 @@
 const multer = require("multer");
 
-// Store uploads in memory buffers for direct Cloudinary streaming
+// Store uploads in memory buffers for direct Cloudflare R2 streaming
 const storage = multer.memoryStorage();
 
 const upload = multer({

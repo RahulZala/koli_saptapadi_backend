@@ -1,11 +1,11 @@
-const cloudinaryService = require("../services/cloudinary.service");
+const cloudflareService = require("../services/cloudflare.service");
 const profileService = require("../services/profile.service");
 
 class ImageController {
   async manageImage(req, res, next) {
     try {
       const { existing_images, new_images } = req.body;
-      const result = await cloudinaryService.managePhotos(req.userId, existing_images, new_images);
+      const result = await cloudflareService.managePhotos(req.userId, existing_images, new_images);
       return res.status(200).json(result);
     } catch (err) {
       next(err);

@@ -1,5 +1,16 @@
-const { Pool } = require("pg");
+const { Pool, types } = require("pg");
 const env = require("./env");
+
+// Ensure TIMESTAMP without timezone (OID 1114) from Postgres is parsed as UTC
+// preventing local timezone offset (e.g. IST +5:30) from corrupting dates
+types.setTypeParser(1114, (str) => {
+  if (!str) return null;
+  const isoStr = str.includes("T") ? str : str.replace(" ", "T");
+  return new Date(isoStr.endsWith("Z") ? isoStr : isoStr + "Z");
+});
+
+// TIMESTAMPTZ (OID 1184)
+types.setTypeParser(1184, (str) => (str ? new Date(str) : null));
 
 let poolConfig;
 

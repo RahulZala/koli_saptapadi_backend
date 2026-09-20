@@ -48,6 +48,8 @@ class AuthService {
     const expiresAt = getExpiryDateTimeMinutes(5);
 
     await userRepository.createOTP(phone, otp, expiresAt);
+
+    // await wakitService.sendOTP(ph/one, otp)
     return {
       success: 1,
       message: "OTP sent successfully",
@@ -65,9 +67,17 @@ class AuthService {
       return { success: 0, message: "Invalid OTP" };
     }
 
-    const now = new Date();
-    const expiryDate = new Date(record.expires_at);
-    if (expiryDate < now) {
+    const now = Date.now();
+    let expiryTime;
+    if (record.expires_at instanceof Date) {
+      expiryTime = record.expires_at.getTime();
+    } else {
+      const expStr = String(record.expires_at).trim();
+      const isoStr = expStr.includes("T") ? expStr : expStr.replace(" ", "T");
+      expiryTime = new Date(isoStr.endsWith("Z") ? isoStr : isoStr + "Z").getTime();
+    }
+
+    if (expiryTime < now) {
       return { success: 0, message: "OTP expired" };
     }
 

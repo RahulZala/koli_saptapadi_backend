@@ -9,18 +9,31 @@ class ProfileService {
     const sections = {};
 
     const [userRows] = await pool.execute(
-      "SELECT first_name, last_name, gender, dob, is_verified FROM users WHERE id = $1",
+      `SELECT 
+        first_name, last_name, gender, dob, is_verified,
+        family_completed, physical_completed, address_completed,
+        marital_professional_completed, partner_preferences_completed, document
+      FROM users WHERE id = $1`,
       [userId]
     );
     const row = userRows[0] || null;
 
+    const isNonEmpty = (val) => {
+      if (!val) return false;
+      const str = String(val).trim().replace(/^"|"$/g, "");
+      return str.length > 0;
+    };
+
+    const isFlagTrue = (val) => val === true || val === 1 || val === "1" || val === "true";
+
+    // 1. Basic Details
     if (
       row &&
-      row.is_verified &&
-      row.first_name &&
-      row.last_name &&
-      row.gender &&
-      row.dob
+      isFlagTrue(row.is_verified) &&
+      isNonEmpty(row.first_name) &&
+      isNonEmpty(row.last_name) &&
+      isNonEmpty(row.gender) &&
+      Boolean(row.dob)
     ) {
       percentage += 20;
       sections.basic = true;
@@ -28,22 +41,34 @@ class ProfileService {
       sections.basic = false;
     }
 
-    sections.family = await profileRepository.rowExists("family_details", userId);
+    // 2. Family Details (Requires both users.family_completed = true AND record in family_details)
+    const familyRowExists = await profileRepository.rowExists("family_details", userId);
+    sections.family = Boolean(isFlagTrue(row?.family_completed) && familyRowExists);
     if (sections.family) percentage += 20;
 
-    sections.physical = await profileRepository.rowExists("physical_details", userId);
+    // 3. Physical Details (Requires both users.physical_completed = true AND record in physical_details)
+    const physicalRowExists = await profileRepository.rowExists("physical_details", userId);
+    sections.physical = Boolean(isFlagTrue(row?.physical_completed) && physicalRowExists);
     if (sections.physical) percentage += 20;
 
-    sections.address = await profileRepository.rowExists("user_addresses", userId);
+    // 4. Address Details (Requires both users.address_completed = true AND record in user_addresses)
+    const addressRowExists = await profileRepository.rowExists("user_addresses", userId);
+    sections.address = Boolean(isFlagTrue(row?.address_completed) && addressRowExists);
     if (sections.address) percentage += 20;
 
-    sections.marital_professional = await profileRepository.rowExists("marital_professional_details", userId);
+    // 5. Marital & Professional Details
+    const mpRowExists = await profileRepository.rowExists("marital_professional_details", userId);
+    sections.marital_professional = Boolean(isFlagTrue(row?.marital_professional_completed) && mpRowExists);
     if (sections.marital_professional) percentage += 10;
 
-    sections.partner_preferences = await profileRepository.rowExists("partner_preferences", userId);
+    // 6. Partner Preferences
+    const ppRowExists = await profileRepository.rowExists("partner_preferences", userId);
+    sections.partner_preferences = Boolean(isFlagTrue(row?.partner_preferences_completed) && ppRowExists);
     if (sections.partner_preferences) percentage += 10;
 
-    sections.document = await profileRepository.rowExists("user_document", userId);
+    // 7. Documents
+    const docRowExists = await profileRepository.rowExists("user_document", userId);
+    sections.document = Boolean(isFlagTrue(row?.document) && docRowExists);
 
     const flowOrder = [
       "basic",
@@ -81,33 +106,121 @@ class ProfileService {
   }
 
   async addFamilyDetails(userId, data) {
-    const { father_name, mother_name, siblings, father_occupations, family_type } = data;
-    if (!father_name || !mother_name || siblings < 0 || !father_occupations || !family_type) {
+    const father_name = String(data.father_name || "").trim();
+    const mother_name = String(data.mother_name || "").trim();
+    const siblings = data.siblings !== undefined && data.siblings !== null && data.siblings !== ""
+      ? parseInt(data.siblings, 10)
+      : -1;
+    const father_occupations = String(data.father_occupations || data.father_occupation || "").trim();
+    const family_type = String(data.family_type || "").trim();
+    const maternal_surname = String(data.maternal_surname || "").trim();
+
+    if (!father_name || !mother_name || isNaN(siblings) || siblings < 0 || !father_occupations || !family_type) {
       return { success: 0, message: "Required fields missing" };
     }
 
-    await profileRepository.saveFamilyDetails(userId, data);
+    await profileRepository.saveFamilyDetails(userId, {
+      father_name,
+      mother_name,
+      siblings,
+      father_occupations,
+      family_type,
+      maternal_surname
+    });
     return { success: 1, message: "Family details saved successfully" };
   }
 
   async addPhysicalDetails(userId, data) {
-    const { height, weight } = data;
-    if (!height || parseFloat(weight) <= 0) {
+    let height = data.height;
+    if (typeof height === "string" && height.includes("'")) {
+      const match = height.match(/^(\d+)\s*['’]\s*(\d+)?/);
+      if (match) {
+        const ft = parseInt(match[1], 10);
+        const inch = parseInt(match[2] || "0", 10);
+        height = Math.round((ft * 30.48) + (inch * 2.54));
+      }
+    }
+    const weight = parseInt(data.weight || 0, 10);
+
+    if (!height || weight <= 0) {
       return { success: 0, message: "Height & weight required" };
     }
 
     const allowedManglik = ["yes", "no", "dont_know"];
-    data.manglik = allowedManglik.includes(data.manglik) ? data.manglik : "dont_know";
+    const manglik = allowedManglik.includes(data.manglik) ? data.manglik : "dont_know";
 
     const allowedThal = ["major", "minor", "dont_know"];
-    data.thalassemia_status = allowedThal.includes(data.thalassemia_status) ? data.thalassemia_status : "dont_know";
+    const thalassemia_status = allowedThal.includes(data.thalassemia_status) ? data.thalassemia_status : "dont_know";
 
-    await profileRepository.savePhysicalDetails(userId, data);
+    const child_count = data.child_count !== undefined ? data.child_count : (data.children_count || "");
+
+    await profileRepository.savePhysicalDetails(userId, {
+      ...data,
+      height,
+      weight,
+      manglik,
+      thalassemia_status,
+      child_count
+    });
     return { success: 1, message: "Physical details saved successfully" };
   }
 
   async addOrUpdateAddress(userId, data) {
-    const { address_type, address_line, state_id, district_id, city_id } = data;
+    if (!data) {
+      return { success: 0, message: "Invalid JSON" };
+    }
+
+    // Format 1: Android App format with permanent_address (required) and current_address (optional)
+    if (data.permanent_address || data.current_address) {
+      const permanent = data.permanent_address;
+      if (!permanent) {
+        return { success: 0, message: "Permanent address required" };
+      }
+
+      const pa_address = String(permanent.address_line || "").trim();
+      const pa_district = parseInt(permanent.district_id || 0, 10);
+      const pa_city = parseInt(permanent.city_id || 0, 10);
+
+      if (!pa_address || pa_district <= 0 || pa_city <= 0) {
+        return { success: 0, message: "Permanent address, district & city required" };
+      }
+
+      await profileRepository.saveAddress(userId, {
+        address_type: "permanent",
+        address_line: pa_address,
+        landmark: String(permanent.landmark || "").trim(),
+        state_id: parseInt(permanent.state_id || 0, 10),
+        district_id: pa_district,
+        city_id: pa_city,
+        pincode: String(permanent.pincode || "").trim()
+      });
+
+      const current = data.current_address;
+      if (current && (current.address_line || current.district_id || current.city_id)) {
+        const ca_address = String(current.address_line || "").trim();
+        const ca_district = parseInt(current.district_id || 0, 10);
+        const ca_city = parseInt(current.city_id || 0, 10);
+
+        if (!ca_address || ca_district <= 0 || ca_city <= 0) {
+          return { success: 0, message: "Current address, district & city required" };
+        }
+
+        await profileRepository.saveAddress(userId, {
+          address_type: "current",
+          address_line: ca_address,
+          landmark: String(current.landmark || "").trim(),
+          state_id: parseInt(current.state_id || 0, 10),
+          district_id: ca_district,
+          city_id: ca_city,
+          pincode: String(current.pincode || "").trim()
+        });
+      }
+
+      return { success: 1, message: "Address saved successfully" };
+    }
+
+    // Format 2: Flat payload with address_type
+    const { address_type, address_line, state_id, district_id, city_id, landmark, pincode } = data;
 
     if (!["current", "permanent"].includes(address_type)) {
       return { success: 0, message: "Invalid address type" };
@@ -117,12 +230,27 @@ class ProfileService {
       return { success: 0, message: "Invalid address data" };
     }
 
-    const action = await profileRepository.saveAddress(userId, data);
-    return { success: 1, action };
+    const action = await profileRepository.saveAddress(userId, {
+      address_type,
+      address_line: String(address_line).trim(),
+      landmark: String(landmark || "").trim(),
+      state_id: parseInt(state_id, 10),
+      district_id: parseInt(district_id, 10),
+      city_id: parseInt(city_id, 10),
+      pincode: String(pincode || "").trim()
+    });
+    return { success: 1, message: "Address saved successfully", action };
   }
 
   async addMaritalProfessionalDetails(userId, data) {
-    const action = await profileRepository.saveMaritalProfessionalDetails(userId, data);
+    const highest_degree = data.highest_education || data.highest_degree || "";
+    const university = data.university || data.university_name || "";
+    const payload = {
+      ...data,
+      highest_degree,
+      university
+    };
+    const action = await profileRepository.saveMaritalProfessionalDetails(userId, payload);
     return {
       success: 1,
       message: `Marital & professional details ${action} successfully`
@@ -130,7 +258,30 @@ class ProfileService {
   }
 
   async savePartnerPreferences(userId, data) {
-    const { age_min, age_max, height_min, height_max, weight_min, weight_max } = data;
+    const convertHeightToCm = (val) => {
+      if (val === null || val === undefined || val === "") return null;
+      if (typeof val === "number") return val > 0 ? Math.round(val) : null;
+      const str = String(val).trim();
+      if (!str) return null;
+
+      const ftInMatch = str.match(/^(\d+)\s*(?:'|’|ft|feet|\s)\s*(\d+)?/i);
+      if (ftInMatch) {
+        const ft = parseInt(ftInMatch[1], 10);
+        const inch = parseInt(ftInMatch[2] || "0", 10);
+        return Math.round((ft * 30.48) + (inch * 2.54));
+      }
+
+      const num = parseFloat(str);
+      return !isNaN(num) && num > 0 ? Math.round(num) : null;
+    };
+
+    const height_min = convertHeightToCm(data.height_min_ft ?? data.height_min);
+    const height_max = convertHeightToCm(data.height_max_ft ?? data.height_max);
+
+    const age_min = data.age_min !== undefined && data.age_min !== null && data.age_min !== "" ? parseInt(data.age_min, 10) : null;
+    const age_max = data.age_max !== undefined && data.age_max !== null && data.age_max !== "" ? parseInt(data.age_max, 10) : null;
+    const weight_min = data.weight_min !== undefined && data.weight_min !== null && data.weight_min !== "" ? parseInt(data.weight_min, 10) : null;
+    const weight_max = data.weight_max !== undefined && data.weight_max !== null && data.weight_max !== "" ? parseInt(data.weight_max, 10) : null;
 
     if (age_min !== null && age_max !== null && age_min > age_max) {
       return { success: 0, message: "age_min cannot be greater than age_max" };
@@ -142,7 +293,20 @@ class ProfileService {
       return { success: 0, message: "weight_min cannot be greater than weight_max" };
     }
 
-    const action = await profileRepository.savePartnerPreferences(userId, data);
+    const payload = {
+      ...data,
+      age_min,
+      age_max,
+      height_min,
+      height_max,
+      weight_min,
+      weight_max,
+      preferred_marital_status: String(data.preferred_marital_status || "").trim(),
+      preferred_education: String(data.preferred_education || "").trim(),
+      preferred_occupation: String(data.preferred_occupation || "").trim()
+    };
+
+    const action = await profileRepository.savePartnerPreferences(userId, payload);
     return {
       success: 1,
       message: `Partner preferences ${action} successfully`

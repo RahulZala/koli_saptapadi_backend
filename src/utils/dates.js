@@ -25,9 +25,17 @@ function getExpiryDateTimeMinutes(minutes = 5) {
 
 function timeAgo(datetimeStr) {
   if (!datetimeStr) return "";
-  const timestamp = new Date(datetimeStr).getTime() / 1000;
+  let timestamp;
+  if (datetimeStr instanceof Date) {
+    timestamp = datetimeStr.getTime() / 1000;
+  } else {
+    const str = String(datetimeStr).trim();
+    const isoStr = str.includes("T") ? str : str.replace(" ", "T");
+    const dateObj = new Date(isoStr.endsWith("Z") ? isoStr : isoStr + "Z");
+    timestamp = isNaN(dateObj.getTime()) ? new Date(datetimeStr).getTime() / 1000 : dateObj.getTime() / 1000;
+  }
   const currentTime = Math.floor(Date.now() / 1000);
-  const diff = currentTime - timestamp;
+  const diff = Math.max(0, currentTime - timestamp);
 
   if (diff < 10) {
     return "Just now";

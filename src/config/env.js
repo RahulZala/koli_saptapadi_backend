@@ -19,10 +19,14 @@ const env = {
   DB_NAME: process.env.SUPABASE_DB_NAME || process.env.DB_NAME || "postgres",
   DB_CONNECTION_LIMIT: parseInt(process.env.DB_CONNECTION_LIMIT || "10", 10),
 
-  // Cloudinary Storage
-  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || "",
-  CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || "",
-  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || "",
+  // Cloudflare R2 Object Storage
+  CLOUDFLARE_R2_IS_LIVE: parseInt(process.env.CLOUDFLARE_R2_IS_LIVE || "1", 10),
+  CLOUDFLARE_R2_ACCOUNT_ID: process.env.CLOUDFLARE_R2_ACCOUNT_ID || "",
+  CLOUDFLARE_R2_ACCESS_KEY_ID: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || "",
+  CLOUDFLARE_R2_SECRET_ACCESS_KEY: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || "",
+  CLOUDFLARE_R2_BUCKET_NAME: process.env.CLOUDFLARE_R2_BUCKET_NAME || "",
+  CLOUDFLARE_R2_PUBLIC_URL: (process.env.CLOUDFLARE_R2_PUBLIC_URL || "").replace(/\/+$/, ""),
+
 
   // Razorpay Toggle (1 = Live Mode, 0 = Test Mode)
   RAZORPAY_IS_LIVE: parseInt(process.env.RAZORPAY_IS_LIVE || "1", 10),
@@ -47,6 +51,18 @@ const env = {
   FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || "",
   FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || "",
   FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : "",
+
+  // Wakit WhatsApp OTP Gateway (1 = Live Mode, 0 = Test Mode)
+  WAKIT_IS_LIVE: parseInt(process.env.WAKIT_IS_LIVE || "1", 10),
+  WAKIT_LIVE_KEY: process.env.WAKIT_LIVE_KEY || "wk_live_aedJBitFa3qmMPChzAhT9fYxlWuA0C3RaOZbdm3D",
+  WAKIT_TEST_KEY: process.env.WAKIT_TEST_KEY || "wk_test_blHfX5cntzJjesEMor4zrTlP8G3yWGF9nMYUR7V3",
+
+  get WAKIT_API_KEY() {
+    return this.WAKIT_IS_LIVE === 1 ? this.WAKIT_LIVE_KEY : this.WAKIT_TEST_KEY;
+  },
+
+  WAKIT_BASE_URL: process.env.WAKIT_BASE_URL || "https://wakit.in/api/v1",
+  MASTER_OTP: process.env.MASTER_OTP || "",
 
   // Timezone default
   TIMEZONE: "Asia/Kolkata"
