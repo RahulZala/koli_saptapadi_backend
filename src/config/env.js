@@ -64,6 +64,10 @@ const env = {
   WAKIT_BASE_URL: process.env.WAKIT_BASE_URL || "https://wakit.in/api/v1",
   MASTER_OTP: process.env.MASTER_OTP || "",
 
+  // Security & Document Verification
+  VERIFICATION_STRICT_MODE: parseInt(process.env.VERIFICATION_STRICT_MODE || "1", 10),
+  FACE_SIMILARITY_THRESHOLD: parseInt(process.env.FACE_SIMILARITY_THRESHOLD || "70", 10),
+
   // Timezone default
   TIMEZONE: "Asia/Kolkata"
 };

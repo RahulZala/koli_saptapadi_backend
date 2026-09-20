@@ -2,12 +2,13 @@ const { PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 const { r2Client, bucketName, publicUrl, isLive } = require("../config/cloudflare");
 const pool = require("../config/database");
 const { validateBase64Image } = require("../utils/validation");
+const { optimizeImage } = require("../utils/imageOptimizer");
 
 class CloudflareService {
   /**
    * Uploads a Buffer to Cloudflare R2 or returns a debug URL when in test mode.
    */
-  async uploadBuffer(buffer, key, mimeType = "image/jpeg") {
+  async uploadBuffer(buffer, key, mimeType = "image/webp") {
     if (isLive && r2Client && bucketName) {
       const command = new PutObjectCommand({
         Bucket: bucketName,
@@ -50,7 +51,7 @@ class CloudflareService {
   }
 
   /**
-   * Manages user gallery photos (up to 5 images max)
+   * Manages user gallery photos (up to 5 images max) with automatic optimization
    */
   async managePhotos(userId, existingImages = [], newImages = []) {
     if (!Array.isArray(existingImages)) existingImages = [];
@@ -79,7 +80,7 @@ class CloudflareService {
       }
     }
 
-    // 2. Validate and upload new base64 images
+    // 2. Validate, optimize and upload new base64 images
     const uploadedUrls = [];
     const errors = [];
 
@@ -92,8 +93,16 @@ class CloudflareService {
       }
 
       try {
-        const key = `user_photos/${userId}/photo_${Date.now()}_${i}.${valid.ext}`;
-        const imageUrl = await this.uploadBuffer(valid.buffer, key, valid.mime);
+        // Optimize: compress size by 70-80% while retaining high visual quality
+        const optimized = await optimizeImage(valid.buffer, {
+          maxWidth: 1600,
+          maxHeight: 1600,
+          quality: 82,
+          format: "webp"
+        });
+
+        const key = `user_photos/${userId}/photo_${Date.now()}_${i}.${optimized.ext}`;
+        const imageUrl = await this.uploadBuffer(optimized.buffer, key, optimized.mime);
 
         await pool.execute(
           "INSERT INTO user_photos (user_id, image_url, created_at) VALUES ($1, $2, CURRENT_TIMESTAMP)",
@@ -123,7 +132,8 @@ class CloudflareService {
   }
 
   /**
-   * Uploads identity verification documents and profile photo
+   * Uploads identity verification documents and profile photo with automatic optimization,
+   * 70%+ Face Similarity verification, and Document OCR profile data matching.
    */
   async uploadDocuments(userId, documentType, profileB64, frontB64, backB64) {
     const vProfile = validateBase64Image(profileB64);
@@ -139,14 +149,51 @@ class CloudflareService {
       return { success: 0, message: "Invalid image(s)", errors };
     }
 
-    const timestamp = Date.now();
-    const profileKey = `documents/${userId}/profile_${timestamp}.${vProfile.ext}`;
-    const frontKey = `documents/${userId}/front_${timestamp}.${vFront.ext}`;
-    const backKey = `documents/${userId}/back_${timestamp}.${vBack.ext}`;
+    // 1. Fetch user's basic profile details from database
+    const [userRows] = await pool.execute(
+      "SELECT id, first_name, last_name, dob, gender, is_verified FROM users WHERE id = $1",
+      [userId]
+    );
+    const userProfile = userRows[0] || {};
 
-    const profileUrl = await this.uploadBuffer(vProfile.buffer, profileKey, vProfile.mime);
-    const frontUrl = await this.uploadBuffer(vFront.buffer, frontKey, vFront.mime);
-    const backUrl = await this.uploadBuffer(vBack.buffer, backKey, vBack.mime);
+    // 2. Perform Face Similarity (>=70%) and Document OCR profile matching
+    const verificationService = require("./verification.service");
+    const verificationResult = await verificationService.verifyDocumentUpload(
+      vProfile.buffer,
+      vFront.buffer,
+      userProfile
+    );
+
+    if (!verificationResult.is_verified) {
+      return {
+        success: 0,
+        message: verificationResult.errors[0] || "Document verification failed",
+        errors: verificationResult.errors,
+        verification: {
+          face_similarity: `${verificationResult.face_similarity_score}%`,
+          face_match: verificationResult.face_match,
+          name_match: verificationResult.name_match,
+          dob_match: verificationResult.dob_match,
+          gender_match: verificationResult.gender_match
+        }
+      };
+    }
+
+    // 3. Optimize images for documents and profile photo
+    const [optProfile, optFront, optBack] = await Promise.all([
+      optimizeImage(vProfile.buffer, { maxWidth: 1600, maxHeight: 1600, quality: 84, format: "webp" }),
+      optimizeImage(vFront.buffer, { maxWidth: 1800, maxHeight: 1800, quality: 86, format: "webp" }),
+      optimizeImage(vBack.buffer, { maxWidth: 1800, maxHeight: 1800, quality: 86, format: "webp" })
+    ]);
+
+    const timestamp = Date.now();
+    const profileKey = `documents/${userId}/profile_${timestamp}.${optProfile.ext}`;
+    const frontKey = `documents/${userId}/front_${timestamp}.${optFront.ext}`;
+    const backKey = `documents/${userId}/back_${timestamp}.${optBack.ext}`;
+
+    const profileUrl = await this.uploadBuffer(optProfile.buffer, profileKey, optProfile.mime);
+    const frontUrl = await this.uploadBuffer(optFront.buffer, frontKey, optFront.mime);
+    const backUrl = await this.uploadBuffer(optBack.buffer, backKey, optBack.mime);
 
     const [existing] = await pool.execute("SELECT id FROM user_document WHERE user_id = $1", [userId]);
 
@@ -162,11 +209,18 @@ class CloudflareService {
       );
     }
 
-    await pool.execute("UPDATE users SET document = true WHERE id = $1", [userId]);
+    await pool.execute("UPDATE users SET document = true, is_verified = true WHERE id = $1", [userId]);
 
     return {
       success: 1,
-      message: "Uploaded successfully",
+      message: "Document verified and uploaded successfully",
+      verification: {
+        face_similarity: `${verificationResult.face_similarity_score}%`,
+        face_match: verificationResult.face_match,
+        name_match: verificationResult.name_match,
+        dob_match: verificationResult.dob_match,
+        gender_match: verificationResult.gender_match
+      },
       data: {
         document_type: documentType,
         profile: profileUrl,

@@ -17,7 +17,7 @@ class UserService {
     }
 
     const gender = userRows[0].gender;
-    const oppositeGender = gender === "male" ? "female" : "male";
+    const oppositeGender = gender === "Male" ? "Female" : "Male";
 
     let sql = `
       SELECT 
