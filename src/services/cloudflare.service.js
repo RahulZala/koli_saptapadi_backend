@@ -1,78 +1,10 @@
-const { PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
-const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const { PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 const { r2Client, bucketName, publicUrl, isLive } = require("../config/cloudflare");
 const pool = require("../config/database");
-const { validateBase64Image, resolveImageInput } = require("../utils/validation");
+const { validateBase64Image } = require("../utils/validation");
 const { optimizeImage } = require("../utils/imageOptimizer");
 
 class CloudflareService {
-  /**
-   * Generates a presigned PUT URL for direct client-to-Cloudflare R2 upload (bypassing Vercel's 4.5MB limit).
-   */
-  async getPresignedUploadUrl(userId, folder = "documents", filename = null, mimeType = "image/jpeg", expiresIn = 900) {
-    const timestamp = Date.now();
-    const ext = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
-    const cleanFilename = filename
-      ? `${timestamp}_${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`
-      : `${timestamp}.${ext}`;
-    const key = `${folder}/${userId}/${cleanFilename}`;
-
-    const baseUrl = publicUrl ? publicUrl.replace(/\/+$/, "") : `https://${bucketName || "pub-storage"}.r2.dev`;
-    const filePublicUrl = `${baseUrl}/${key}`;
-
-    if (isLive && r2Client && bucketName) {
-      const command = new PutObjectCommand({
-        Bucket: bucketName,
-        Key: key,
-        ContentType: mimeType
-      });
-      const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn });
-      return {
-        key,
-        upload_url: uploadUrl,
-        public_url: filePublicUrl,
-        expires_in: expiresIn,
-        method: "PUT",
-        headers: {
-          "Content-Type": mimeType
-        }
-      };
-    }
-
-    // Debug / Mock Mode
-    return {
-      key,
-      upload_url: filePublicUrl,
-      public_url: filePublicUrl,
-      expires_in: expiresIn,
-      method: "PUT",
-      headers: {
-        "Content-Type": mimeType
-      }
-    };
-  }
-
-  /**
-   * Generates batch presigned upload URLs for document verification images (profile, front, back).
-   */
-  async getDocumentUploadUrls(userId) {
-    const [profile, front, back] = await Promise.all([
-      this.getPresignedUploadUrl(userId, "documents", "profile.jpg", "image/jpeg"),
-      this.getPresignedUploadUrl(userId, "documents", "front_side.jpg", "image/jpeg"),
-      this.getPresignedUploadUrl(userId, "documents", "back_side.jpg", "image/jpeg")
-    ]);
-
-    return {
-      success: 1,
-      message: "Presigned upload URLs generated successfully",
-      data: {
-        profile,
-        front_side: front,
-        back_side: back
-      }
-    };
-  }
-
   /**
    * Uploads a Buffer to Cloudflare R2 or returns a debug URL when in test mode.
    */
@@ -119,7 +51,7 @@ class CloudflareService {
   }
 
   /**
-   * Manages user gallery photos (up to 5 images max) supporting both Base64 and direct R2 URLs.
+   * Manages user gallery photos (up to 5 images max) with automatic optimization
    */
   async managePhotos(userId, existingImages = [], newImages = []) {
     if (!Array.isArray(existingImages)) existingImages = [];
@@ -148,43 +80,35 @@ class CloudflareService {
       }
     }
 
-    // 2. Process new images (Base64 strings or direct R2 URLs)
+    // 2. Validate, optimize and upload new base64 images
     const uploadedUrls = [];
     const errors = [];
 
     for (let i = 0; i < newImages.length; i++) {
-      const item = newImages[i];
-      const resolved = await resolveImageInput(item);
-
-      if (!resolved.ok) {
-        errors[i] = resolved.error;
+      const b64 = newImages[i];
+      const valid = validateBase64Image(b64);
+      if (!valid.ok) {
+        errors[i] = valid.error;
         continue;
       }
 
       try {
-        let finalImageUrl;
+        // Optimize: compress size by 70-80% while retaining high visual quality
+        const optimized = await optimizeImage(valid.buffer, {
+          maxWidth: 1600,
+          maxHeight: 1600,
+          quality: 82,
+          format: "webp"
+        });
 
-        if (resolved.isUrl) {
-          // Image already uploaded directly to Cloudflare R2 via presigned URL
-          finalImageUrl = resolved.url;
-        } else {
-          // Base64 image: optimize and upload to R2
-          const optimized = await optimizeImage(resolved.buffer, {
-            maxWidth: 1600,
-            maxHeight: 1600,
-            quality: 82,
-            format: "webp"
-          });
-
-          const key = `user_photos/${userId}/photo_${Date.now()}_${i}.${optimized.ext}`;
-          finalImageUrl = await this.uploadBuffer(optimized.buffer, key, optimized.mime);
-        }
+        const key = `user_photos/${userId}/photo_${Date.now()}_${i}.${optimized.ext}`;
+        const imageUrl = await this.uploadBuffer(optimized.buffer, key, optimized.mime);
 
         await pool.execute(
           "INSERT INTO user_photos (user_id, image_url, created_at) VALUES ($1, $2, CURRENT_TIMESTAMP)",
-          [userId, finalImageUrl]
+          [userId, imageUrl]
         );
-        uploadedUrls.push(finalImageUrl);
+        uploadedUrls.push(imageUrl);
       } catch (err) {
         console.error("Cloudflare R2 Image upload failed:", err);
         errors[i] = "upload_failed";
@@ -208,15 +132,13 @@ class CloudflareService {
   }
 
   /**
-   * Uploads identity verification documents and profile photo supporting both direct R2 URLs and Base64 strings.
-   * Performs 70%+ Face Similarity verification and Document OCR profile data matching.
+   * Uploads identity verification documents and profile photo with automatic optimization,
+   * 70%+ Face Similarity verification, and Document OCR profile data matching.
    */
-  async uploadDocuments(userId, documentType, profileInput, frontInput, backInput) {
-    const [vProfile, vFront, vBack] = await Promise.all([
-      resolveImageInput(profileInput),
-      resolveImageInput(frontInput),
-      resolveImageInput(backInput)
-    ]);
+  async uploadDocuments(userId, documentType, profileB64, frontB64, backB64) {
+    const vProfile = validateBase64Image(profileB64);
+    const vFront = validateBase64Image(frontB64);
+    const vBack = validateBase64Image(backB64);
 
     const errors = {};
     if (!vProfile.ok) errors.profile = vProfile.error;
@@ -257,35 +179,21 @@ class CloudflareService {
       };
     }
 
-    // 3. Determine URLs (if already uploaded directly to R2, use URLs; if Base64, optimize & upload)
-    let profileUrl, frontUrl, backUrl;
+    // 3. Optimize images for documents and profile photo
+    const [optProfile, optFront, optBack] = await Promise.all([
+      optimizeImage(vProfile.buffer, { maxWidth: 1600, maxHeight: 1600, quality: 84, format: "webp" }),
+      optimizeImage(vFront.buffer, { maxWidth: 1800, maxHeight: 1800, quality: 86, format: "webp" }),
+      optimizeImage(vBack.buffer, { maxWidth: 1800, maxHeight: 1800, quality: 86, format: "webp" })
+    ]);
 
-    if (vProfile.isUrl && vFront.isUrl && vBack.isUrl) {
-      profileUrl = vProfile.url;
-      frontUrl = vFront.url;
-      backUrl = vBack.url;
-    } else {
-      const [optProfile, optFront, optBack] = await Promise.all([
-        vProfile.isUrl
-          ? Promise.resolve({ url: vProfile.url })
-          : optimizeImage(vProfile.buffer, { maxWidth: 1600, maxHeight: 1600, quality: 84, format: "webp" }),
-        vFront.isUrl
-          ? Promise.resolve({ url: vFront.url })
-          : optimizeImage(vFront.buffer, { maxWidth: 1800, maxHeight: 1800, quality: 86, format: "webp" }),
-        vBack.isUrl
-          ? Promise.resolve({ url: vBack.url })
-          : optimizeImage(vBack.buffer, { maxWidth: 1800, maxHeight: 1800, quality: 86, format: "webp" })
-      ]);
+    const timestamp = Date.now();
+    const profileKey = `documents/${userId}/profile_${timestamp}.${optProfile.ext}`;
+    const frontKey = `documents/${userId}/front_${timestamp}.${optFront.ext}`;
+    const backKey = `documents/${userId}/back_${timestamp}.${optBack.ext}`;
 
-      const timestamp = Date.now();
-      const profileKey = `documents/${userId}/profile_${timestamp}.${optProfile.ext || "webp"}`;
-      const frontKey = `documents/${userId}/front_${timestamp}.${optFront.ext || "webp"}`;
-      const backKey = `documents/${userId}/back_${timestamp}.${optBack.ext || "webp"}`;
-
-      profileUrl = optProfile.url || (await this.uploadBuffer(optProfile.buffer, profileKey, optProfile.mime));
-      frontUrl = optFront.url || (await this.uploadBuffer(optFront.buffer, frontKey, optFront.mime));
-      backUrl = optBack.url || (await this.uploadBuffer(optBack.buffer, backKey, optBack.mime));
-    }
+    const profileUrl = await this.uploadBuffer(optProfile.buffer, profileKey, optProfile.mime);
+    const frontUrl = await this.uploadBuffer(optFront.buffer, frontKey, optFront.mime);
+    const backUrl = await this.uploadBuffer(optBack.buffer, backKey, optBack.mime);
 
     const [existing] = await pool.execute("SELECT id FROM user_document WHERE user_id = $1", [userId]);
 
