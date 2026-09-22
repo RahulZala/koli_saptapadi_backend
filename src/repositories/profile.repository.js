@@ -61,18 +61,26 @@ class ProfileRepository {
     const { height, weight, smoking, drinking, diet, is_disabled, disability_details, languages_known, manglik, marital_status, child_count, thalassemia_status } = data;
     const exists = await this.rowExists("physical_details", userId);
 
+    const safeChildCount = (child_count === "" || child_count === null || child_count === undefined)
+      ? 0
+      : (isNaN(parseInt(child_count, 10)) ? 0 : parseInt(child_count, 10));
+
+    const safeWeight = (weight === "" || weight === null || weight === undefined)
+      ? null
+      : (isNaN(parseFloat(weight)) ? null : parseFloat(weight));
+
     if (exists) {
       await pool.execute(
         `UPDATE physical_details SET
           height = $1, weight = $2, smoking = $3, drinking = $4, diet = $5, is_disabled = $6, disability_details = $7, languages_known = $8, manglik = $9, marital_status = $10, child_count = $11, thalassemia_status = $12
         WHERE user_id = $13`,
-        [height, weight, smoking, drinking, diet, is_disabled, disability_details, languages_known, manglik, marital_status, child_count, thalassemia_status, userId]
+        [height, safeWeight, smoking, drinking, diet, is_disabled, disability_details, languages_known, manglik, marital_status, safeChildCount, thalassemia_status, userId]
       );
     } else {
       await pool.execute(
         `INSERT INTO physical_details (user_id, height, weight, smoking, drinking, diet, is_disabled, disability_details, languages_known, manglik, marital_status, child_count, thalassemia_status)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-        [userId, height, weight, smoking, drinking, diet, is_disabled, disability_details, languages_known, manglik, marital_status, child_count, thalassemia_status]
+        [userId, height, safeWeight, smoking, drinking, diet, is_disabled, disability_details, languages_known, manglik, marital_status, safeChildCount, thalassemia_status]
       );
     }
 

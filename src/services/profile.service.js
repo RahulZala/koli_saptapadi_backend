@@ -132,7 +132,7 @@ class ProfileService {
 
   async addPhysicalDetails(userId, data) {
     let height = data.height;
-    if (typeof height === "string" && height.includes("'")) {
+    if (typeof height === "string" && (height.includes("'") || height.includes("’") || height.includes("ft"))) {
       const match = height.match(/^(\d+)\s*['’]\s*(\d+)?/);
       if (match) {
         const ft = parseInt(match[1], 10);
@@ -140,23 +140,31 @@ class ProfileService {
         height = Math.round((ft * 30.48) + (inch * 2.54));
       }
     }
-    const weight = parseInt(data.weight || 0, 10);
+    const weight = parseFloat(data.weight || 0);
 
     if (!height || weight <= 0) {
       return { success: 0, message: "Height & weight required" };
     }
 
+    const manglikRaw = (data.manglik || data.manglic || "").toString().toLowerCase().trim();
     const allowedManglik = ["yes", "no", "dont_know"];
-    const manglik = allowedManglik.includes(data.manglik) ? data.manglik : "dont_know";
+    const manglik = allowedManglik.includes(manglikRaw) ? manglikRaw : "dont_know";
 
+    const thalRaw = (data.thalassemia_status || data.thalassemia || "").toString().toLowerCase().trim();
     const allowedThal = ["major", "minor", "dont_know"];
-    const thalassemia_status = allowedThal.includes(data.thalassemia_status) ? data.thalassemia_status : "dont_know";
+    const thalassemia_status = allowedThal.includes(thalRaw) ? thalRaw : "dont_know";
 
-    const child_count = data.child_count !== undefined ? data.child_count : (data.children_count || "");
+    // Safely parse child_count for PostgreSQL INT column (empty string becomes 0)
+    const rawChildCount = data.child_count !== undefined ? data.child_count : data.children_count;
+    let child_count = 0;
+    if (rawChildCount !== undefined && rawChildCount !== null && rawChildCount !== "") {
+      const parsed = parseInt(rawChildCount, 10);
+      child_count = isNaN(parsed) ? 0 : parsed;
+    }
 
     await profileRepository.savePhysicalDetails(userId, {
       ...data,
-      height,
+      height: String(height),
       weight,
       manglik,
       thalassemia_status,

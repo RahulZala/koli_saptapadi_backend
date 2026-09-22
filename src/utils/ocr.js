@@ -9,7 +9,7 @@ async function preprocessForOCR(imageBuffer) {
   try {
     return await sharp(imageBuffer, { failOnError: false })
       .rotate()
-      .resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true })
+      .resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true })
       .grayscale()
       .normalize()
       .sharpen()
@@ -21,32 +21,41 @@ async function preprocessForOCR(imageBuffer) {
 }
 
 /**
- * Extracts text from an image buffer using Tesseract OCR.
+ * Extracts text from an image buffer using Tesseract OCR with a strict timeout.
+ * Guaranteed to never hang or block serverless functions.
  * @param {Buffer} imageBuffer
+ * @param {number} [timeoutMs=2500]
  * @returns {Promise<{ text: string, confidence: number, lines: string[] }>}
  */
-async function extractTextFromImage(imageBuffer) {
+async function extractTextFromImage(imageBuffer, timeoutMs = 2500) {
   try {
-    const preprocessed = await preprocessForOCR(imageBuffer);
+    const ocrPromise = (async () => {
+      const preprocessed = await preprocessForOCR(imageBuffer);
+      const result = await Tesseract.recognize(preprocessed, "eng", {
+        logger: () => {} // Silent logger
+      });
 
-    const result = await Tesseract.recognize(preprocessed, "eng", {
-      logger: () => {} // Silent logger
-    });
+      const text = result?.data?.text || "";
+      const confidence = result?.data?.confidence || 0;
+      const lines = text
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
 
-    const text = result?.data?.text || "";
-    const confidence = result?.data?.confidence || 0;
-    const lines = text
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0);
+      return {
+        text,
+        confidence,
+        lines
+      };
+    })();
 
-    return {
-      text,
-      confidence,
-      lines
-    };
+    const timeoutPromise = new Promise((resolve) =>
+      setTimeout(() => resolve({ text: "", confidence: 0, lines: [], timed_out: true }), timeoutMs)
+    );
+
+    return await Promise.race([ocrPromise, timeoutPromise]);
   } catch (err) {
-    console.error("OCR Extraction Error:", err);
+    console.warn("OCR Extraction Notice:", err.message);
     return {
       text: "",
       confidence: 0,
