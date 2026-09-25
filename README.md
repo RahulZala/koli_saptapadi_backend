@@ -24,6 +24,10 @@ This repository contains the production-ready Node.js + Express.js backend migra
 > **Vercel Serverless Ready**:
 > The project exposes a serverless entry point at `api/index.js` configured via `vercel.json` for effortless deployment to Vercel without requiring a persistent VPS process.
 
+> [!IMPORTANT]
+> **AiSensy WhatsApp OTP & Template Integration**:
+> WhatsApp OTP dispatch is powered by AiSensy Campaign v2 API using the **`new_auth`** template. Phone numbers are strictly validated for **India (+91)**. For full template management instructions, see [`docs/AISENSY_WHATSAPP_INTEGRATION.md`](docs/AISENSY_WHATSAPP_INTEGRATION.md).
+
 ---
 
 ## 🛠️ Architecture & Folder Structure

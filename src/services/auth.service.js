@@ -3,6 +3,9 @@ const crypto = require("crypto");
 const userRepository = require("../repositories/user.repository");
 const subscriptionRepository = require("../repositories/subscription.repository");
 const { getExpiryDateTimeMinutes } = require("../utils/dates");
+const aisensyService = require("./aisensy.service");
+// [OLD CODE - Wakit WhatsApp Service - COMMENTED OUT]
+// const wakitService = require("./wakit.service");
 
 class AuthService {
   async login(email, password) {
@@ -44,16 +47,35 @@ class AuthService {
       return { success: 0, message: "Phone number required" };
     }
 
+    // Validate that number is an Indian (+91) mobile number
+    const validation = aisensyService.validateAndFormatIndianNumber(phone);
+    if (!validation.valid) {
+      return {
+        success: 0,
+        message: validation.message || "Only Indian mobile numbers (+91) are supported"
+      };
+    }
+
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = getExpiryDateTimeMinutes(5);
 
+    // Save OTP to database
     await userRepository.createOTP(phone, otp, expiresAt);
 
-    // await wakitService.sendOTP(ph/one, otp)
+    // Send OTP via AiSensy WhatsApp Platform (template: new_auth)
+    const aisensyRes = await aisensyService.sendOTP(phone, otp);
+
+    // [OLD CODE - Wakit WhatsApp Gateway - COMMENTED OUT]
+    // await wakitService.sendOTP(phone, otp);
+
     return {
       success: 1,
       message: "OTP sent successfully",
-      data: { otp }
+      data: {
+        otp,
+        whatsapp_status: aisensyRes.success ? "sent" : "failed",
+        whatsapp_message: aisensyRes.message
+      }
     };
   }
 

@@ -52,16 +52,22 @@ const env = {
   FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || "",
   FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : "",
 
-  // Wakit WhatsApp OTP Gateway (1 = Live Mode, 0 = Test Mode)
-  WAKIT_IS_LIVE: parseInt(process.env.WAKIT_IS_LIVE || "1", 10),
-  WAKIT_LIVE_KEY: process.env.WAKIT_LIVE_KEY || "wk_live_aedJBitFa3qmMPChzAhT9fYxlWuA0C3RaOZbdm3D",
-  WAKIT_TEST_KEY: process.env.WAKIT_TEST_KEY || "wk_test_blHfX5cntzJjesEMor4zrTlP8G3yWGF9nMYUR7V3",
+  // AiSensy WhatsApp OTP Configuration
+  AISENSY_API_KEY: process.env.AISENSY_API_KEY || process.env.AISENSY_PROJECT_API_PWD || "228164f17ff364eff1c10",
+  AISENSY_PROJECT_API_PWD: process.env.AISENSY_PROJECT_API_PWD || process.env.AISENSY_API_KEY || "228164f17ff364eff1c10",
+  AISENSY_OTP_TEMPLATE: process.env.AISENSY_OTP_TEMPLATE || process.env.AISENSY_CAMPAIGN_NAME || "new_auth",
+  AISENSY_CAMPAIGN_NAME: process.env.AISENSY_CAMPAIGN_NAME || process.env.AISENSY_OTP_TEMPLATE || "new_auth",
+  AISENSY_BASE_URL: process.env.AISENSY_BASE_URL || "https://backend.aisensy.com/campaign/t1/api/v2",
 
-  get WAKIT_API_KEY() {
-    return this.WAKIT_IS_LIVE === 1 ? this.WAKIT_LIVE_KEY : this.WAKIT_TEST_KEY;
-  },
+  // [OLD CODE - Wakit WhatsApp OTP Gateway - COMMENTED OUT]
+  // WAKIT_IS_LIVE: parseInt(process.env.WAKIT_IS_LIVE || "1", 10),
+  // WAKIT_LIVE_KEY: process.env.WAKIT_LIVE_KEY || "wk_live_aedJBitFa3qmMPChzAhT9fYxlWuA0C3RaOZbdm3D",
+  // WAKIT_TEST_KEY: process.env.WAKIT_TEST_KEY || "wk_test_blHfX5cntzJjesEMor4zrTlP8G3yWGF9nMYUR7V3",
+  // get WAKIT_API_KEY() {
+  //   return this.WAKIT_IS_LIVE === 1 ? this.WAKIT_LIVE_KEY : this.WAKIT_TEST_KEY;
+  // },
+  // WAKIT_BASE_URL: process.env.WAKIT_BASE_URL || "https://wakit.in/api/v1",
 
-  WAKIT_BASE_URL: process.env.WAKIT_BASE_URL || "https://wakit.in/api/v1",
   MASTER_OTP: process.env.MASTER_OTP || "",
 
   // Security & Document Verification
