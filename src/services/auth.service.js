@@ -48,13 +48,13 @@ class AuthService {
     }
 
     // Validate that number is an Indian (+91) mobile number
-    const validation = aisensyService.validateAndFormatIndianNumber(phone);
-    if (!validation.valid) {
-      return {
-        success: 0,
-        message: validation.message || "Only Indian mobile numbers (+91) are supported"
-      };
-    }
+    // const validation = aisensyService.validateAndFormatIndianNumber(phone);
+    // if (!validation.valid) {
+    //   return {
+    //     success: 0,
+    //     message: validation.message || "Only Indian mobile numbers (+91) are supported"
+    //   };
+    // }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = getExpiryDateTimeMinutes(5);
@@ -72,7 +72,7 @@ class AuthService {
       success: 1,
       message: "OTP sent successfully",
       data: {
-        otp,
+        // otp,
         whatsapp_status: aisensyRes.success ? "sent" : "failed",
         whatsapp_message: aisensyRes.message
       }
