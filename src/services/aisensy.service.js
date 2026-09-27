@@ -1,20 +1,36 @@
 const env = require("../config/env");
 
+// ============================================================================
+// AiSensy WhatsApp Configuration
+// You can directly update your API Key and Campaign Name here whenever needed!
+// ============================================================================
+const AISENSY_CONFIG = {
+  apiKey: "", // Optional override - by default loads JWT from env.AISENSY_API_KEY
+  projectPwd: "", // Optional override - by default loads from env.AISENSY_PROJECT_API_PWD
+  campaignName: "OTP", // Campaign / Template Name
+  userName: "Koli saptapadi", // Display Name
+  baseUrl: "https://backend.aisensy.com/campaign/t1/api/v2"
+};
+
 class AiSensyService {
   get baseUrl() {
-    return (env.AISENSY_BASE_URL || "https://backend.aisensy.com/campaign/t1/api/v2").replace(/\/+$/, "");
+    return (AISENSY_CONFIG.baseUrl || env.AISENSY_BASE_URL || "https://backend.aisensy.com/campaign/t1/api/v2").replace(/\/+$/, "");
   }
 
   get apiKey() {
-    return env.AISENSY_API_KEY || env.AISENSY_PROJECT_API_PWD || "";
+    return (env.AISENSY_API_KEY || AISENSY_CONFIG.apiKey || "").trim();
+  }
+
+  get projectPwd() {
+    return (env.AISENSY_PROJECT_API_PWD || AISENSY_CONFIG.projectPwd || "").trim();
   }
 
   /**
-   * Default template names configured via environment variables
+   * Default template names configured directly or via environment
    */
   get templates() {
     return {
-      AUTH_OTP: "new_auth",
+      AUTH_OTP: "OTP",
       WELCOME: "welcome_user",
       MATCH_ALERT: "match_notification",
     };
@@ -74,9 +90,9 @@ class AiSensyService {
   /**
    * Generic method to send ANY template message via AiSensy
    * @param {string} phone - Recipient phone number (India +91 only)
-   * @param {string} templateName - Exact template / campaign name in AiSensy (e.g. 'new_auth', 'welcome_user', etc.)
+   * @param {string} templateName - Exact template / campaign name in AiSensy (e.g. 'OTP', 'welcome_user', etc.)
    * @param {Array<string|number>} [templateParams=[]] - Array of template placeholder values matching {{1}}, {{2}}, etc.
-   * @param {Object} [options={}] - Optional metadata (userName, media, tags, attributes)
+   * @param {Object} [options={}] - Optional metadata (userName, media, tags, buttons, attributes)
    * @returns {Promise<{success: boolean, message: string, data?: any, raw?: any}>}
    */
   async sendTemplateMessage(phone, templateName, templateParams = [], options = {}) {
@@ -100,29 +116,36 @@ class AiSensyService {
       apiKey: this.apiKey.trim(),
       campaignName: templateName.trim(),
       destination: destination,
-      userName: options.userName || "User",
+      userName: options.userName || "Koli saptapadi",
       templateParams: (templateParams || []).map(p => String(p)),
-      source: options.source || "api"
+      source: options.source || "new-landing-page form",
+      media: options.media || {},
+      buttons: options.buttons || [],
+      carouselCards: options.carouselCards || [],
+      location: options.location || {},
+      attributes: options.attributes || {},
+      paramsFallbackValue: options.paramsFallbackValue || {
+        FirstName: "user"
+      }
     };
 
-    if (options.media && typeof options.media === "object") {
-      payload.media = options.media;
-    }
-    if (options.attributes && typeof options.attributes === "object") {
-      payload.attributes = options.attributes;
-    }
     if (Array.isArray(options.tags) && options.tags.length > 0) {
       payload.tags = options.tags;
     }
 
     try {
+      const headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      };
+
+      if (this.projectPwd) {
+        headers["X-AiSensy-Project-API-Pwd"] = this.projectPwd;
+      }
+
       const response = await fetch(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "X-AiSensy-Project-API-Pwd": this.apiKey.trim()
-        },
+        headers,
         body: JSON.stringify(payload)
       });
 
@@ -138,7 +161,9 @@ class AiSensyService {
         response.ok &&
         (responseData.status === "success" ||
           responseData.success === true ||
+          responseData.success === "true" ||
           responseData.submitted === true ||
+          responseData.submitted_message_id ||
           responseData.data?.submitted === true)
       ) {
         return {
@@ -182,20 +207,44 @@ class AiSensyService {
   }
 
   /**
-   * Helper specifically for sending OTP using the AUTH_OTP template (default: 'new_auth')
+   * Helper specifically for sending OTP using the AUTH_OTP template (default: 'OTP')
    * @param {string} phone - Recipient phone number (India +91 only)
    * @param {string|number} otp - 6-digit OTP code
-   * @param {string} [userName="User"] - Optional recipient name
+   * @param {string} [userName="Koli saptapadi"] - Optional recipient name
    * @param {string} [overrideTemplateName] - Optional custom template name override
    * @returns {Promise<{success: boolean, message: string, data?: any, raw?: any}>}
    */
-  async sendOTP(phone, otp, userName = "User", overrideTemplateName = null) {
+  async sendOTP(phone, otp, userName = "Koli saptapadi", overrideTemplateName = null) {
     if (!otp) {
       return { success: false, message: "OTP code is required" };
     }
 
     const template = overrideTemplateName || this.templates.AUTH_OTP;
-    return this.sendTemplateMessage(phone, template, [otp], { userName });
+    const otpStr = String(otp);
+
+    // Provide button parameter for templates that have a dynamic "Copy OTP" URL / button
+    const buttons = [
+      {
+        type: "button",
+        sub_type: "url",
+        index: 0,
+        parameters: [
+          {
+            type: "text",
+            text: otpStr
+          }
+        ]
+      }
+    ];
+
+    return this.sendTemplateMessage(phone, template, [otpStr], {
+      userName: userName || "Koli saptapadi",
+      source: "new-landing-page form",
+      buttons: buttons,
+      paramsFallbackValue: {
+        FirstName: "user"
+      }
+    });
   }
 }
 

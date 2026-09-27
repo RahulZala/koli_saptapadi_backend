@@ -5,7 +5,7 @@ const env = require("./config/env");
 const PORT = env.PORT || 3000;
 const HOST = "0.0.0.0";
 
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
   const interfaces = os.networkInterfaces();
   const networkAddresses = [];
 
@@ -30,4 +30,26 @@ app.listen(PORT, HOST, () => {
   });
   console.log(`===================================================`);
 });
+
+// Handle Server-level Errors (e.g., Port already in use EADDRINUSE)
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`\n[ERROR] Port ${PORT} is already in use by another process!`);
+    console.error(`[FIX] 1. Stop the existing process running on port ${PORT}, OR`);
+    console.error(`[FIX] 2. Change the PORT in .env (e.g. PORT=3001)\n`);
+  } else {
+    console.error(`\n[SERVER ERROR]`, err.message, `\n`);
+  }
+  process.exit(1);
+});
+
+// Uncaught Exception & Rejection Handlers
+process.on("uncaughtException", (err) => {
+  console.error("\n[FATAL] Uncaught Exception:", err);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("\n[FATAL] Unhandled Rejection at:", promise, "reason:", reason);
+});
+
 

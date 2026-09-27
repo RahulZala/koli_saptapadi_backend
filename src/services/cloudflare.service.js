@@ -229,6 +229,51 @@ class CloudflareService {
       }
     };
   }
+
+  /**
+   * Uploads ONLY profile photo without requiring documents or OCR verification
+   * Used when profile_update flag is 'N'
+   */
+  async uploadProfilePhotoOnly(userId, profileB64) {
+    const vProfile = validateBase64Image(profileB64);
+    if (!vProfile.ok) {
+      return { success: 0, message: "Invalid profile image", errors: { profile: vProfile.error } };
+    }
+
+    // Optimize profile photo
+    const optProfile = await optimizeImage(vProfile.buffer, {
+      maxWidth: 1600,
+      maxHeight: 1600,
+      quality: 84,
+      format: "webp"
+    });
+
+    const timestamp = Date.now();
+    const profileKey = `documents/${userId}/profile_${timestamp}.${optProfile.ext}`;
+    const profileUrl = await this.uploadBuffer(optProfile.buffer, profileKey, optProfile.mime);
+
+    const [existing] = await pool.execute("SELECT id FROM user_document WHERE user_id = $1", [userId]);
+
+    if (existing.length > 0) {
+      await pool.execute(
+        "UPDATE user_document SET profile = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2",
+        [profileUrl, userId]
+      );
+    } else {
+      await pool.execute(
+        "INSERT INTO user_document (user_id, profile) VALUES ($1, $2)",
+        [userId, profileUrl]
+      );
+    }
+
+    return {
+      success: 1,
+      message: "Profile photo updated successfully",
+      data: {
+        profile: profileUrl
+      }
+    };
+  }
 }
 
 module.exports = new CloudflareService();

@@ -7,7 +7,7 @@ This document outlines the AiSensy WhatsApp OTP and notification architecture in
 ## 📌 Overview
 
 - **Provider**: AiSensy Campaign API (`https://backend.aisensy.com/campaign/t1/api/v2`)
-- **Active Auth OTP Template**: `new_auth`
+- **Active Auth OTP Template / Campaign**: `OTP`
 - **Region Restriction**: **India only (+91)**. Numbers outside India or invalid numbers are automatically blocked.
 - **Previous Gateway**: Legacy Wakit gateway code has been commented out and deprecated.
 
@@ -26,8 +26,8 @@ AISENSY_API_KEY=228164f17ff364eff1c10
 AISENSY_PROJECT_API_PWD=228164f17ff364eff1c10
 
 # Default Approved Template Name for OTP verification
-AISENSY_OTP_TEMPLATE=new_auth
-AISENSY_CAMPAIGN_NAME=new_auth
+AISENSY_OTP_TEMPLATE=OTP
+AISENSY_CAMPAIGN_NAME=OTP
 
 # AiSensy Campaign v2 API URL
 AISENSY_BASE_URL=https://backend.aisensy.com/campaign/t1/api/v2
@@ -54,7 +54,7 @@ All numbers are strictly validated before making any API call to AiSensy:
 
 ---
 
-## 💬 How `new_auth` Template Works in AiSensy
+## 💬 How `OTP` Template Works in AiSensy
 
 AiSensy requires the template to be approved in your Meta WhatsApp Manager and created as an API Campaign in AiSensy.
 
@@ -63,12 +63,32 @@ When `/api/calls/send_otp` is called:
 2. Sends the following POST request payload to AiSensy:
 ```json
 {
-  "apiKey": "228164f17ff364eff1c10",
-  "campaignName": "new_auth",
-  "destination": "+919876543210",
-  "userName": "User",
+  "apiKey": "YOUR_API_KEY",
+  "campaignName": "OTP",
+  "destination": "+917405603337",
+  "userName": "Koli saptapadi",
   "templateParams": ["123456"],
-  "source": "api"
+  "source": "new-landing-page form",
+  "media": {},
+  "buttons": [
+    {
+      "type": "button",
+      "sub_type": "url",
+      "index": 0,
+      "parameters": [
+        {
+          "type": "text",
+          "text": "123456"
+        }
+      ]
+    }
+  ],
+  "carouselCards": [],
+  "location": {},
+  "attributes": {},
+  "paramsFallbackValue": {
+    "FirstName": "user"
+  }
 }
 ```
 3. Header:

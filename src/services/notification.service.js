@@ -14,7 +14,6 @@ class NotificationService {
 
   async sendFCMPushNotification(token, title, body) {
     // Standard Firebase HTTP v1 API structure placeholder/integration
-    console.log(`[FCM Push] Sending notification to token: ${token.substring(0, 10)}... | Title: ${title}`);
     return true;
   }
 

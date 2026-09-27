@@ -5,7 +5,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
+    "dev": "node --watch --watch-path=src src/server.js",
     "check": "node --check src/server.js",
     "build": "node scripts/build.js"
   },

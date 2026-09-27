@@ -2,6 +2,7 @@ const pool = require("../config/database");
 const interestRepository = require("../repositories/interest.repository");
 const notificationService = require("./notification.service");
 const userRepository = require("../repositories/user.repository");
+const { timeAgo } = require("../utils/dates");
 
 class InterestService {
   async manageInterest(toUserId, fromUserId, action, interestId = null) {
@@ -106,7 +107,8 @@ class InterestService {
     const list = await interestRepository.getInterestsList(userId, parseInt(type, 10));
     const data = list.map((row) => ({
       ...row,
-      name: `${row.first_name || ""} ${row.last_name || ""}`.trim()
+      name: `${row.first_name || ""} ${row.last_name || ""}`.trim(),
+      timestamp: timeAgo(row.created_at)
     }));
 
     return {

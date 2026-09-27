@@ -62,17 +62,13 @@ class AuthService {
     // Save OTP to database
     await userRepository.createOTP(phone, otp, expiresAt);
 
-    // Send OTP via AiSensy WhatsApp Platform (template: new_auth)
+    // Send OTP via AiSensy WhatsApp Platform (template: OTP)
     const aisensyRes = await aisensyService.sendOTP(phone, otp);
-
-    // [OLD CODE - Wakit WhatsApp Gateway - COMMENTED OUT]
-    // await wakitService.sendOTP(phone, otp);
 
     return {
       success: 1,
       message: "OTP sent successfully",
       data: {
-        // otp,
         whatsapp_status: aisensyRes.success ? "sent" : "failed",
         whatsapp_message: aisensyRes.message
       }
@@ -84,26 +80,30 @@ class AuthService {
       return { success: 0, message: "Phone and OTP are required" };
     }
 
+    const isMasterOtp = env.MASTER_OTP && String(otp).trim() === String(env.MASTER_OTP).trim();
+
     const record = await userRepository.findLatestOTP(phone, otp);
-    if (!record) {
+    if (!record && !isMasterOtp) {
       return { success: 0, message: "Invalid OTP" };
     }
 
-    const now = Date.now();
-    let expiryTime;
-    if (record.expires_at instanceof Date) {
-      expiryTime = record.expires_at.getTime();
-    } else {
-      const expStr = String(record.expires_at).trim();
-      const isoStr = expStr.includes("T") ? expStr : expStr.replace(" ", "T");
-      expiryTime = new Date(isoStr.endsWith("Z") ? isoStr : isoStr + "Z").getTime();
-    }
+    if (record) {
+      const now = Date.now();
+      let expiryTime;
+      if (record.expires_at instanceof Date) {
+        expiryTime = record.expires_at.getTime();
+      } else {
+        const expStr = String(record.expires_at).trim();
+        const isoStr = expStr.includes("T") ? expStr : expStr.replace(" ", "T");
+        expiryTime = new Date(isoStr.endsWith("Z") ? isoStr : isoStr + "Z").getTime();
+      }
 
-    if (expiryTime < now) {
-      return { success: 0, message: "OTP expired" };
-    }
+      if (expiryTime < now && !isMasterOtp) {
+        return { success: 0, message: "OTP expired" };
+      }
 
-    await userRepository.markOTPUsed(record.id);
+      await userRepository.markOTPUsed(record.id);
+    }
 
     let user = await userRepository.findByPhone(phone);
     let userId;
