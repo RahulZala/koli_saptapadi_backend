@@ -256,7 +256,7 @@ class CloudflareService {
 
     if (existing.length > 0) {
       await pool.execute(
-        "UPDATE user_document SET profile = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2",
+        "UPDATE user_document SET profile = $1 WHERE user_id = $2",
         [profileUrl, userId]
       );
     } else {
