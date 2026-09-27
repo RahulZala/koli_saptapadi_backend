@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
+const env = require("../config/env");
 const userRepository = require("../repositories/user.repository");
 const subscriptionRepository = require("../repositories/subscription.repository");
 const { getExpiryDateTimeMinutes } = require("../utils/dates");
