@@ -70,6 +70,7 @@ class AuthService {
       success: 1,
       message: "OTP sent successfully",
       data: {
+        otp,
         whatsapp_status: aisensyRes.success ? "sent" : "failed",
         whatsapp_message: aisensyRes.message
       }
