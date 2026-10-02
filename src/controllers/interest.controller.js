@@ -33,8 +33,8 @@ class InterestController {
 
   async getInterests(req, res, next) {
     try {
-      const { type } = req.body;
-      const result = await interestService.getInterests(req.userId, type || 0);
+      const { interest_type } = req.body;
+      const result = await interestService.getInterests(req.userId, interest_type || 0);
       return res.status(200).json(result);
     } catch (err) {
       next(err);
