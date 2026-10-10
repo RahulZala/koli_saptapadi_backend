@@ -10,6 +10,15 @@ class NotificationController {
       next(err);
     }
   }
+
+  async getUnreadCount(req, res, next) {
+    try {
+      const result = await notificationService.getUnreadCount(req.userId);
+      return res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 module.exports = new NotificationController();

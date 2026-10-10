@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const pool = require("../config/database");
 const env = require("../config/env");
 const aisensyService = require("../services/aisensy.service");
+const adminNotificationService = require("../services/admin-notification.service");
 
 // Payment statuses that count as "paid"
 const PAID = ["paid", "success", "captured", "completed"];
@@ -180,7 +181,7 @@ class AdminController {
       const offset = (page - 1) * limit;
 
       const paidExists = `EXISTS (SELECT 1 FROM subscription_payments p WHERE p.user_id=u.id AND p.status IN (${PAID_SQL}))`;
-      const where = [`(u.first_name ILIKE $1 OR u.last_name ILIKE $1 OR u.phone ILIKE $1 OR u.email ILIKE $1)`];
+      const where = [`(u.id::text ILIKE $1 OR u.first_name ILIKE $1 OR u.last_name ILIKE $1 OR u.phone ILIKE $1 OR u.email ILIKE $1)`];
 
       if (filter === "disabled") where.push("u.is_active=false");
       if (filter === "active") where.push("u.is_active=true");
@@ -466,6 +467,38 @@ class AdminController {
     } catch (err) {
       console.error("Admin getReports error:", err);
       return res.status(500).json({ error: "Failed to fetch reports" });
+    }
+  }
+
+  async sendNotification(req, res) {
+    const { audience, user_id: rawUserId, title, message } = req.body || {};
+    const normalizedTitle = typeof title === "string" ? title.trim() : "";
+    const normalizedMessage = typeof message === "string" ? message.trim() : "";
+
+    if (audience !== "all" && audience !== "user") {
+      return res.status(400).json({ error: "Choose all users or one user" });
+    }
+    if (audience === "user" && (!["number", "string"].includes(typeof rawUserId) || !Number.isInteger(Number(rawUserId)) || Number(rawUserId) < 1)) {
+      return res.status(400).json({ error: "A valid user ID is required" });
+    }
+    if (!normalizedTitle || normalizedTitle.length > 100) {
+      return res.status(400).json({ error: "Title is required and must be 100 characters or fewer" });
+    }
+    if (!normalizedMessage || normalizedMessage.length > 1000) {
+      return res.status(400).json({ error: "Message is required and must be 1,000 characters or fewer" });
+    }
+
+    try {
+      const result = await adminNotificationService.send({
+        audience,
+        userId: audience === "user" ? Number(rawUserId) : null,
+        title: normalizedTitle,
+        message: normalizedMessage
+      });
+      return res.status(result.status || 200).json(result);
+    } catch (err) {
+      console.error("Admin sendNotification error:", err);
+      return res.status(500).json({ error: "Failed to send admin notification" });
     }
   }
 }

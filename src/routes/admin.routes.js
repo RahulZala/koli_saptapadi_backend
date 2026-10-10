@@ -57,5 +57,6 @@ router.patch("/users/:id/kyc", authenticateAdmin, adminController.updateUserKyc)
 router.get("/plans", authenticateAdmin, adminController.getPlans);
 router.patch("/plans/:id", authenticateAdmin, adminController.updatePlan);
 router.get("/reports", authenticateAdmin, adminController.getReports);
+router.post("/notifications/send", authenticateAdmin, adminController.sendNotification);
 
 module.exports = router;

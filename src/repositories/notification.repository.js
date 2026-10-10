@@ -26,6 +26,8 @@ class NotificationRepository {
       title: row.title,
       message: row.message,
       type: row.type,
+      created_at: row.created_at,
+      is_read: row.is_read === true || row.is_read === 1 || row.is_read === "1" || row.is_read === "true",
       time: timeAgo(row.created_at)
     }));
 
@@ -34,6 +36,21 @@ class NotificationRepository {
       page,
       total: notifications.length
     };
+  }
+
+  async getUnreadCount(userId) {
+    const [rows] = await pool.execute(
+      "SELECT COUNT(*)::int AS unread_count FROM notifications WHERE receiver_id = $1 AND COALESCE(is_read::text, '0') IN ('0', 'false')",
+      [userId]
+    );
+    return rows[0]?.unread_count ?? 0;
+  }
+
+  async markAllAsRead(userId) {
+    await pool.execute(
+      "UPDATE notifications SET is_read = '1' WHERE receiver_id = $1 AND COALESCE(is_read::text, '0') IN ('0', 'false')",
+      [userId]
+    );
   }
 
   async getUserFcmToken(userId) {

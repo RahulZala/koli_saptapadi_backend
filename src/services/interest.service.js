@@ -61,7 +61,7 @@ class InterestService {
       // Deduct interest view count from receiver
       await pool.execute(
         "UPDATE user_subscriptions SET remaining_interests = remaining_interests - 1 WHERE user_id = $1 AND remaining_interests > 0 AND is_active = 1",
-        [toUserId]
+        [fromUserId]
       );
 
       const senderUser = await userRepository.findById(fromUserId);
@@ -69,9 +69,9 @@ class InterestService {
 
       await notificationService.createAndSendNotification(
         fromUserId,
-        toUserId,
-        "Interest Update",
-        `Your interest was accepted by ${userName}`,
+        interest.from_user,
+        "Interest Accepted",
+        `${userName} accepted your interest`,
         "interest_accept",
         interestId
       );
@@ -90,9 +90,9 @@ class InterestService {
 
       await notificationService.createAndSendNotification(
         fromUserId,
-        toUserId,
-        "Interest Update",
-        `Your interest was rejected by ${userName}`,
+        interest.from_user,
+        "Interest Declined",
+        `${userName} declined your interest`,
         "interest_reject",
         interestId
       );
