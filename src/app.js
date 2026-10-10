@@ -13,6 +13,7 @@ const locationRoutes = require("./routes/location.routes");
 const documentRoutes = require("./routes/document.routes");
 const imageRoutes = require("./routes/image.routes");
 const notificationRoutes = require("./routes/notification.routes");
+const adminRoutes = require("./routes/admin.routes");
 
 const app = express();
 
@@ -23,6 +24,9 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // Route Normalization Alias Middleware for legacy Android endpoint requests
 app.use(routeAlias);
+
+// Mount Admin API Endpoints
+app.use("/api/admin", adminRoutes);
 
 // Mount API Route Handlers (supporting both /api/calls and /api)
 const apiRoutes = [

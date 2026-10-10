@@ -22,6 +22,9 @@ const env = {
 
   // Authorization Secret
   JWT_SECRET: process.env.JWT_SECRET || "koli_saptapadi_express_jwt_secret_key_2026",
+  ADMIN_JWT_SECRET: process.env.ADMIN_JWT_SECRET || "12159547ffe108e244c95ea10ffd3813279bb12fd83e9cf54076bcef7d8d88e1",
+  ADMIN_PHONES: process.env.ADMIN_PHONES || "919760975757,917405603337,9760975757,7405603337,9638336198,919638336198",
+  ADMIN_ORIGIN: process.env.ADMIN_ORIGIN || "*",
 
   // Cloudflare R2 Object Storage
   CLOUDFLARE_R2_IS_LIVE: parseInt(process.env.CLOUDFLARE_R2_IS_LIVE || "1", 10),

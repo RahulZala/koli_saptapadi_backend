@@ -209,11 +209,11 @@ class CloudflareService {
       );
     }
 
-    await pool.execute("UPDATE users SET document = true, is_verified = true WHERE id = $1", [userId]);
+    await pool.execute("UPDATE users SET document = true, is_verified = false WHERE id = $1", [userId]);
 
     return {
       success: 1,
-      message: "Document verified and uploaded successfully",
+      message: "Document uploaded successfully and submitted for admin verification",
       verification: {
         face_similarity: `${verificationResult.face_similarity_score}%`,
         face_match: verificationResult.face_match,
