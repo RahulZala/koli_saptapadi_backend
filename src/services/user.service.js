@@ -24,14 +24,13 @@ class UserService {
         u.id, u.first_name, u.last_name, u.sub_caste, u.dob,
         pd.height, pd.weight,
         mp.occupation, mp.work_city,
-        up.profile
+        up.profile,u.is_verified
       FROM users u
       LEFT JOIN physical_details pd ON pd.user_id = u.id
       LEFT JOIN marital_professional_details mp ON mp.user_id = u.id
       LEFT JOIN user_addresses ua ON ua.user_id = u.id AND ua.address_type = 'current'
       LEFT JOIN user_document up ON up.user_id = u.id 
       WHERE u.gender = $1
-        AND u.is_verified = true
         AND u.document = true
         AND u.id != $2
         AND NOT EXISTS (

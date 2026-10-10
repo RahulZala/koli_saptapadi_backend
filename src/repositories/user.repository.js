@@ -58,7 +58,7 @@ class UserRepository {
 
   async createUserFromPhone(phone) {
     const [rows] = await pool.execute(
-      "INSERT INTO users (phone, is_verified) VALUES ($1, true) RETURNING id",
+      "INSERT INTO users (phone, is_verified) VALUES ($1, false) RETURNING id",
       [phone]
     );
     return rows[0] ? rows[0].id : null;
