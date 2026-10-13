@@ -374,7 +374,7 @@ class ProfileService {
       LEFT JOIN marital_professional_details mpd ON mpd.user_id = u.id
       LEFT JOIN partner_preferences pp ON pp.user_id = u.id
       LEFT JOIN user_document ud ON ud.user_id = u.id
-      WHERE u.id = $1 AND u.is_verified = true`,
+      WHERE u.id = $1`,
       [profileUserId]
     );
 
