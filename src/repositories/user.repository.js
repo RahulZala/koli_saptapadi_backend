@@ -66,7 +66,7 @@ class UserRepository {
 
   async updateTokenAndVerify(userId, token) {
     await pool.execute(
-      "UPDATE users SET api_token = $1, is_verified = true WHERE id = $2",
+      "UPDATE users SET api_token = $1 WHERE id = $2",
       [token, userId]
     );
   }
