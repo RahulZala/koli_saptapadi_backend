@@ -15,8 +15,8 @@ class AuthController {
     try {
       const phone = req.body.phone || req.body.to || req.query.phone || req.query.to;
       const result = await authService.sendOTP(phone);
-      const statusCode = result.success === 1 ? 200 : 400;
-      return res.status(statusCode).json(result);
+      const statusCode = result.success === 1 ? 200 : 200;
+      return res.status(200).json(result);
     } catch (err) {
       next(err);
     }
@@ -27,8 +27,8 @@ class AuthController {
       const phone = req.body.phone || req.body.to || req.query.phone || req.query.to;
       const otp = req.body.otp || req.body.code || req.query.otp || req.query.code;
       const result = await authService.verifyOTP(phone, otp);
-      const statusCode = result.success === 1 ? 200 : 400;
-      return res.status(statusCode).json(result);
+      const statusCode = result.success === 1 ? 200 : 200;
+      return res.status(200).json(result);
     } catch (err) {
       next(err);
     }

@@ -17,7 +17,7 @@ class DocumentController {
       // Flag 'N': Only update profile picture (documents not required)
       if (updateFlag === "N" || (updateFlag === "" && profile && !front_side && !back_side)) {
         if (!profile) {
-          return res.status(400).json({
+          return res.status(200).json({
             success: 0,
             message: "Profile photo is required when profile_update is 'N'"
           });
@@ -27,7 +27,7 @@ class DocumentController {
           req.userId,
           profile
         );
-        return res.status(result.success === 1 ? 200 : 400).json(result);
+        return res.status(result.success === 1 ? 200 : 200).json(result);
       }
 
       // Flag 'Y' (or default with full document payload): Update document & profile picture
@@ -38,7 +38,7 @@ class DocumentController {
         front_side,
         back_side
       );
-      return res.status(result.success === 1 ? 200 : 400).json(result);
+      return res.status(result.success === 1 ? 200 : 200).json(result);
     } catch (err) {
       next(err);
     }
