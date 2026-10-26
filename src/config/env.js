@@ -59,7 +59,16 @@ const env = {
   FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : "",
   FCM_TEST_DEVICE_TOKEN: process.env.FCM_TEST_DEVICE_TOKEN || "",
 
-  // AiSensy WhatsApp Configuration
+  // Meta Official WhatsApp API (Picdik Marketing)
+  META_WHATSAPP_BASE_URL: (process.env.META_WHATSAPP_BASE_URL || "").replace(/\/+$/, ""),
+  META_WHATSAPP_API_VERSION: process.env.META_WHATSAPP_API_VERSION || "v19.0",
+  META_WHATSAPP_PHONE_ID: process.env.META_WHATSAPP_PHONE_ID || "",
+  META_WHATSAPP_WABA_ID: process.env.META_WHATSAPP_WABA_ID || "",
+  META_WHATSAPP_BUSINESS_ID: process.env.META_WHATSAPP_BUSINESS_ID || "",
+  META_WHATSAPP_ACCESS_TOKEN: process.env.META_WHATSAPP_ACCESS_TOKEN || "",
+  META_WHATSAPP_LANGUAGE_CODE: process.env.META_WHATSAPP_LANGUAGE_CODE || "en",
+
+  // Legacy AiSensy WhatsApp Configuration (Commented/Fallback)
   AISENSY_API_KEY: process.env.AISENSY_API_KEY || process.env.AISENSY_PROJECT_API_PWD || "",
   AISENSY_PROJECT_API_PWD: process.env.AISENSY_PROJECT_API_PWD || process.env.AISENSY_API_KEY || "",
   AISENSY_OTP_TEMPLATE: process.env.AISENSY_OTP_TEMPLATE || process.env.AISENSY_CAMPAIGN_NAME || "OTP",

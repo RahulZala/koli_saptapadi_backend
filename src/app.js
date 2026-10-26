@@ -13,6 +13,13 @@ const locationRoutes = require("./routes/location.routes");
 const documentRoutes = require("./routes/document.routes");
 const imageRoutes = require("./routes/image.routes");
 const notificationRoutes = require("./routes/notification.routes");
+const shortlistRoutes = require("./routes/shortlist.routes");
+const privacyRoutes = require("./routes/privacy.routes");
+const biodataRoutes = require("./routes/biodata.routes");
+const profileViewsRoutes = require("./routes/profile-views.routes");
+const chatRoutes = require("./routes/chat.routes");
+const kundliRoutes = require("./routes/kundli.routes");
+const referralRoutes = require("./routes/referral.routes");
 const adminRoutes = require("./routes/admin.routes");
 
 const app = express();
@@ -38,7 +45,14 @@ const apiRoutes = [
   locationRoutes,
   documentRoutes,
   imageRoutes,
-  notificationRoutes
+  notificationRoutes,
+  shortlistRoutes,
+  privacyRoutes,
+  biodataRoutes,
+  profileViewsRoutes,
+  chatRoutes,
+  kundliRoutes,
+  referralRoutes
 ];
 
 apiRoutes.forEach(router => {

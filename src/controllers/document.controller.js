@@ -38,6 +38,17 @@ class DocumentController {
         front_side,
         back_side
       );
+
+      // If referral_code was provided on the document page during registration:
+      if (req.body.referral_code && String(req.body.referral_code).trim()) {
+        try {
+          const referralRepository = require("../repositories/referral.repository");
+          await referralRepository.applyReferralCode(req.userId, String(req.body.referral_code).trim());
+        } catch (err) {
+          console.warn("Notice applying referral code during document upload:", err.message);
+        }
+      }
+
       return res.status(result.success === 1 ? 200 : 200).json(result);
     } catch (err) {
       next(err);

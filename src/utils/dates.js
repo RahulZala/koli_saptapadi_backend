@@ -23,6 +23,19 @@ function getExpiryDateTimeMinutes(minutes = 5) {
   return new Date(Date.now() + minutes * 60 * 1000);
 }
 
+function calculateAge(dob) {
+  if (!dob) return null;
+  const dobDate = new Date(dob);
+  if (isNaN(dobDate.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - dobDate.getFullYear();
+  const m = today.getMonth() - dobDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dobDate.getDate())) {
+    age--;
+  }
+  return age;
+}
+
 function timeAgo(datetimeStr) {
   if (!datetimeStr) return "";
   let timestamp;
@@ -60,5 +73,6 @@ module.exports = {
   getCurrentDate,
   getCurrentDateTime,
   getExpiryDateTimeMinutes,
+  calculateAge,
   timeAgo
 };

@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 const pool = require("../config/database");
 const env = require("../config/env");
-const aisensyService = require("../services/aisensy.service");
+const whatsappService = require("../services/whatsapp.service");
 const adminNotificationService = require("../services/admin-notification.service");
 
 // Payment statuses that count as "paid"
@@ -70,13 +70,9 @@ class AdminController {
         [rawPhone, otp]
       );
 
-      console.log(`\n========================================`);
-      console.log(`[ADMIN AUTH] Login OTP for ${rawPhone}: ${otp}`);
-      console.log(`========================================\n`);
-
-      // Try sending via WhatsApp AiSensy service
+      // Try sending via Meta WhatsApp API (Picdik Marketing gateway - template name parameter: "auth")
       try {
-        await aisensyService.sendOTP(rawPhone, otp);
+        await whatsappService.sendAuthOTP(rawPhone, otp, "auth");
       } catch (waErr) {
         console.warn("[ADMIN AUTH] WhatsApp send error (fallback to log):", waErr.message);
       }

@@ -4,7 +4,9 @@ const env = require("../config/env");
 const userRepository = require("../repositories/user.repository");
 const subscriptionRepository = require("../repositories/subscription.repository");
 const { getExpiryDateTimeMinutes } = require("../utils/dates");
-const aisensyService = require("./aisensy.service");
+const whatsappService = require("./whatsapp.service");
+// [OLD CODE - AiSensy WhatsApp Service - COMMENTED OUT]
+// const aisensyService = require("./aisensy.service");
 // [OLD CODE - Wakit WhatsApp Service - COMMENTED OUT]
 // const wakitService = require("./wakit.service");
 
@@ -48,31 +50,22 @@ class AuthService {
       return { success: 0, message: "Phone number required" };
     }
 
-    // Validate that number is an Indian (+91) mobile number
-    // const validation = aisensyService.validateAndFormatIndianNumber(phone);
-    // if (!validation.valid) {
-    //   return {
-    //     success: 0,
-    //     message: validation.message || "Only Indian mobile numbers (+91) are supported"
-    //   };
-    // }
-
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = getExpiryDateTimeMinutes(5);
 
     // Save OTP to database
     await userRepository.createOTP(phone, otp, expiresAt);
-
-    // Send OTP via AiSensy WhatsApp Platform (template: OTP)
-    const aisensyRes = await aisensyService.sendOTP(phone, otp);
+    // Send OTP via Meta WhatsApp Cloud API (Picdik Marketing gateway - template name passed as parameter: "auth")
+    const waRes = await whatsappService.sendAuthOTP(phone, otp, "auth");
 
     return {
       success: 1,
       message: "OTP sent successfully",
       data: {
         otp,
-        whatsapp_status: aisensyRes.success ? "sent" : "failed",
-        whatsapp_message: aisensyRes.message
+        whatsapp_status: waRes.success ? "sent" : "failed",
+        whatsapp_message: waRes.message,
+        details: waRes.data || waRes.raw
       }
     };
   }

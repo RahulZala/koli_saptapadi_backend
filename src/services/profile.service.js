@@ -96,13 +96,27 @@ class ProfileService {
   }
 
   async updateBasicDetails(userId, data) {
-    const { first_name, gender, dob, profile_for } = data;
+    const { first_name, gender, dob, profile_for, referral_code } = data;
     if (!first_name || !gender || !dob || !profile_for) {
       return { success: 0, message: "Required fields missing" };
     }
 
     await profileRepository.updateBasicDetails(userId, data);
-    return { success: 1, message: "Basic details updated successfully" };
+
+    // If referral_code was provided at register time:
+    let referralResult = null;
+    if (referral_code && String(referral_code).trim()) {
+      const referralRepository = require("../repositories/referral.repository");
+      referralResult = await referralRepository.applyReferralCode(userId, String(referral_code).trim());
+    }
+
+    return {
+      success: 1,
+      message: referralResult && referralResult.success === 1
+        ? "Basic details saved & referral applied (+3 Send Interests added to both accounts!)"
+        : "Basic details updated successfully",
+      referral_applied: referralResult ? referralResult.success === 1 : false
+    };
   }
 
   async addFamilyDetails(userId, data) {
