@@ -36,8 +36,8 @@ class ProfileViewsRepository {
     await this.ensureTable();
     await blockRepository.ensureTable();
     await privacyRepository.ensureColumns();
-    page = parseInt(page, 10) || 1;
-    limit = parseInt(limit, 10) || 20;
+    page = Math.max(1, parseInt(page, 10) || 1);
+    limit = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
     const offset = (page - 1) * limit;
 
     const [countRows] = await pool.execute(

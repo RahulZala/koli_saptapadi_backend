@@ -134,18 +134,24 @@ console.log("✔ Express app & route alias normalizer verified");
     console.log("▶ [Test 6b] Testing profile request status and private contact permissions...");
     const profileService = require("../src/services/profile.service");
     const interestService = require("../src/services/interest.service");
+    const profileViewsRepository = require("../src/repositories/profile-views.repository");
     const privacyRepository = require("../src/repositories/privacy.repository");
     const profileOriginals = {
       getPairRequests: interestRepository.getPairRequests,
       hasAcceptedInterest: interestRepository.hasAcceptedInterest,
       getPrivacySettings: privacyRepository.getPrivacySettings,
+      recordView: profileViewsRepository.recordView,
       getBlockStatus: blockRepository.getBlockStatus,
       isBlockedBetween: blockRepository.isBlockedBetween,
       execute: pool.execute
     };
     let capturedProfileQuery = "";
     let imageQueryCount = 0;
+    const recordedProfileViews = [];
     try {
+      profileViewsRepository.recordView = async (viewerId, viewedUserId) => {
+        recordedProfileViews.push([viewerId, viewedUserId]);
+      };
       interestRepository.getPairRequests = async () => [{
         id: 91, from_user: 1, to_user: 22, status: "pending"
       }];
@@ -160,7 +166,7 @@ console.log("✔ Express app & route alias normalizer verified");
       blockRepository.isBlockedBetween = async () => false;
       interestRepository.hasAcceptedInterest = async () => false;
       pool.execute = async (sql) => {
-        if (!sql.includes("user_photos")) capturedProfileQuery = sql;
+        if (sql.includes("FROM users u")) capturedProfileQuery = sql;
         if (sql.includes("user_photos")) {
           imageQueryCount += 1;
           return [[{ image_url: "private-photo" }], null];
@@ -227,6 +233,8 @@ console.log("✔ Express app & route alias normalizer verified");
       assert.strictEqual(acceptedProfile.data.email, "member@example.test");
       assert(capturedProfileQuery.includes("u.phone") && capturedProfileQuery.includes("u.email"),
         "Accepted contacts may be selected according to privacy settings");
+      assert.deepStrictEqual(recordedProfileViews, [[1, 22], [1, 22], [1, 22]],
+        "Successfully viewed profiles must be recorded, but blocked/unavailable profiles must not");
       const acceptedPhotos = await profileService.getImages(1, 22);
       assert.strictEqual(acceptedPhotos.data.profile[0], "private-photo",
         "Accepted connections may view request-only photos");
@@ -251,6 +259,7 @@ console.log("✔ Express app & route alias normalizer verified");
       interestRepository.getPairRequests = profileOriginals.getPairRequests;
       interestRepository.hasAcceptedInterest = profileOriginals.hasAcceptedInterest;
       privacyRepository.getPrivacySettings = profileOriginals.getPrivacySettings;
+      profileViewsRepository.recordView = profileOriginals.recordView;
       blockRepository.getBlockStatus = profileOriginals.getBlockStatus;
       blockRepository.isBlockedBetween = profileOriginals.isBlockedBetween;
       pool.execute = profileOriginals.execute;
@@ -321,22 +330,54 @@ console.log("✔ Express app & route alias normalizer verified");
     }
     console.log("✔ Duplicate requests are serialized and rejected");
 
-    // Test 7: Kundli / Horoscope Compatibility (Point 8)
-    console.log("▶ [Test 7] Testing Kundli & Horoscope Compatibility Algorithm...");
+    // Test 7: Kundli / Horoscope Comparison (Point 8)
+    console.log("▶ [Test 7] Testing Kundli & Horoscope profile comparison...");
     const kundliService = require("../src/services/kundli.service");
-    const match1 = kundliService.calculateCompatibility(
-      { manglik: "no", gotra: "Solanki" },
-      { manglik: "no", gotra: "Chavda" }
+    const comparison = kundliService.compareProfiles(
+      { rashi: "Mesh", nakshatra: "Ashwini", gotra: "Solanki", manglik: "no" },
+      { rashi: "Vrushabh", nakshatra: "Rohini", gotra: "Chavda", manglik: "dont_know" }
     );
-    assert(match1.score >= 85, "Compatible Manglik & different gotra should have high compatibility");
-    assert(match1.remarks.includes("Manglik Dosha Compatible"), "Must report Manglik compatibility");
+    assert.strictEqual(comparison.available, true, "Saved details should be available for comparison");
+    assert.strictEqual(comparison.details.find((item) => item.field === "gotra").partner_value, "Chavda");
+    assert.match(comparison.message, /not a Guna Milan score/);
+    const incompleteComparison = kundliService.compareProfiles(null, null);
+    assert.strictEqual(incompleteComparison.available, false, "Missing Kundli data must not report a match");
+    const kundliRepository = require("../src/repositories/kundli.repository");
+    const kundliOriginals = {
+      getKundli: kundliRepository.getKundli,
+      saveKundli: kundliRepository.saveKundli,
+      hasAcceptedInterest: interestRepository.hasAcceptedInterest
+    };
+    let kundliReadIds = [];
+    let savedKundli = null;
+    try {
+      interestRepository.hasAcceptedInterest = async () => false;
+      kundliRepository.getKundli = async (id) => {
+        kundliReadIds.push(id);
+        return { rashi: id === 1 ? "Mesh" : "Vrushabh" };
+      };
+      const unauthorizedKundli = await kundliService.getKundli(1, 2);
+      assert.strictEqual(unauthorizedKundli.success, 0, "Kundli must require an accepted interest");
+      assert.strictEqual(kundliReadIds.length, 0, "Unauthorized Kundli requests must not read stored details");
 
-    const match2 = kundliService.calculateCompatibility(
-      { manglik: "yes", gotra: "Solanki" },
-      { manglik: "no", gotra: "Solanki" }
-    );
-    assert(match2.score < match1.score, "Mismatched Manglik should lower compatibility score");
-    console.log("✔ Kundli compatibility & Guna Milan scoring verified");
+      interestRepository.hasAcceptedInterest = async () => true;
+      const authorizedKundli = await kundliService.getKundli(1, 2);
+      assert.strictEqual(authorizedKundli.success, 1);
+      assert.deepStrictEqual(kundliReadIds, [2, 1], "Comparison must load partner and viewer profiles");
+
+      kundliRepository.saveKundli = async (userId, data) => {
+        savedKundli = { userId, data };
+      };
+      await kundliService.saveKundli(1, { rashi: "  Mesh  ", ignored: "not persisted" });
+      assert.strictEqual(savedKundli.data.rashi, "Mesh", "Saved Kundli strings should be trimmed");
+      assert.strictEqual(Object.hasOwn(savedKundli.data, "ignored"), false,
+        "Only supported Kundli fields should be persisted");
+    } finally {
+      kundliRepository.getKundli = kundliOriginals.getKundli;
+      kundliRepository.saveKundli = kundliOriginals.saveKundli;
+      interestRepository.hasAcceptedInterest = kundliOriginals.hasAcceptedInterest;
+    }
+    console.log("✔ Kundli access control, persistence sanitization, and comparison verified");
 
     // Test 8: Referral & Micro Add-on Packs (Point 9)
     console.log("▶ [Test 8] Testing Referral Code & Add-on Packs (+3 Send Interests on Both Sides)...");

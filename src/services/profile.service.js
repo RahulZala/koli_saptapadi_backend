@@ -4,6 +4,7 @@ const interestRepository = require("../repositories/interest.repository");
 const userRepository = require("../repositories/user.repository");
 const privacyRepository = require("../repositories/privacy.repository");
 const blockRepository = require("../repositories/block.repository");
+const profileViewsRepository = require("../repositories/profile-views.repository");
 
 class ProfileService {
   async getProfileCompletion(userId) {
@@ -515,6 +516,10 @@ class ProfileService {
     data.request_id = pendingRequest ? pendingRequest.id : null;
     data.can_send_request = canSendRequest;
     data.blocked_by_me = false;
+
+    if (!isSelf) {
+      await profileViewsRepository.recordView(userId, targetId);
+    }
 
     return { success: 1, data };
   }
