@@ -14,8 +14,8 @@ class ImageController {
 
   async getImage(req, res, next) {
     try {
-      const userId = req.body.user_id || req.userId;
-      const result = await profileService.getImages(userId);
+      const profileUserId = req.body.user_id || req.userId;
+      const result = await profileService.getImages(req.userId, profileUserId);
       return res.status(200).json(result);
     } catch (err) {
       next(err);

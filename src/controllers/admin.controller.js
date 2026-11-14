@@ -8,6 +8,12 @@ const adminNotificationService = require("../services/admin-notification.service
 const PAID = ["paid", "success", "captured", "completed"];
 const PAID_SQL = PAID.map((s) => `'${s}'`).join(",");
 
+function isValidDateOnly(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 // Auto-migration helper for subscription_plans description column & user_document constraints
 (async () => {
   try {
@@ -72,9 +78,13 @@ class AdminController {
 
       // Try sending via Meta WhatsApp API (Picdik Marketing gateway - template name parameter: "auth")
       try {
-        await whatsappService.sendAuthOTP(rawPhone, otp, "auth");
+        const waRes = await whatsappService.sendAuthOTP(rawPhone, otp, "auth");
+        if (!waRes.success) {
+          return res.status(502).json({ error: "WhatsApp OTP delivery failed", message: waRes.message });
+        }
       } catch (waErr) {
-        console.warn("[ADMIN AUTH] WhatsApp send error (fallback to log):", waErr.message);
+        console.error("[ADMIN AUTH] WhatsApp send error:", waErr.message);
+        return res.status(502).json({ error: "WhatsApp OTP delivery failed" });
       }
 
       return res.json({ ok: true, message: "OTP sent successfully to admin number." });
@@ -134,16 +144,39 @@ class AdminController {
 
   // 3. System Stats
   async getStats(req, res) {
+    const period = String(req.query.period || req.query.dashboard_period || req.query.revenue_period || "all");
+    const periods = {
+      all: "",
+      week: " AND created_at >= now() - interval '7 days'",
+      month: " AND created_at >= date_trunc('month', CURRENT_DATE) AND created_at < date_trunc('month', CURRENT_DATE) + interval '1 month'",
+      year: " AND created_at >= date_trunc('year', CURRENT_DATE) AND created_at < date_trunc('year', CURRENT_DATE) + interval '1 year'"
+    };
+    let dateFilter = periods[period];
+    let params = [];
+
+    if (period === "custom") {
+      const from = req.query.from || req.query.dashboard_from;
+      const to = req.query.to || req.query.dashboard_to;
+      if (!isValidDateOnly(from) || !isValidDateOnly(to) || from > to) {
+        return res.status(400).json({ error: "Custom filter dates must be valid YYYY-MM-DD values with from on or before to" });
+      }
+      dateFilter = " AND created_at >= $1::date AND created_at < ($2::date + interval '1 day')";
+      params = [from, to];
+    } else if (!Object.prototype.hasOwnProperty.call(periods, period)) {
+      return res.status(400).json({ error: "period must be all, week, month, year, or custom" });
+    }
+
     try {
       const [rows] = await pool.execute(`
         SELECT
-          (SELECT count(*) FROM users)::int AS total_users,
-          (SELECT count(*) FROM users WHERE is_verified = true)::int AS verified_users,
-          (SELECT count(*) FROM users WHERE is_active = false)::int AS disabled_users,
-          (SELECT count(DISTINCT user_id) FROM subscription_payments WHERE status IN (${PAID_SQL}))::int AS paid_users,
-          (SELECT coalesce(sum(amount), 0) FROM subscription_payments WHERE status IN (${PAID_SQL}))::float AS revenue,
-          (SELECT count(*) FROM user_reports)::int AS reports
-      `);
+          (SELECT count(*) FROM users WHERE true${dateFilter})::int AS total_users,
+          (SELECT count(*) FROM users WHERE is_verified = true${dateFilter})::int AS verified_users,
+          (SELECT count(*) FROM users WHERE is_active = false${dateFilter})::int AS disabled_users,
+          (SELECT count(DISTINCT user_id) FROM subscription_payments WHERE status IN (${PAID_SQL})${dateFilter})::int AS paid_users,
+          (SELECT coalesce(sum(amount), 0) FROM subscription_payments WHERE status IN (${PAID_SQL})${dateFilter})::float AS revenue,
+          (SELECT count(*) FROM subscription_payments WHERE status IN (${PAID_SQL})${dateFilter})::int AS revenue_transactions,
+          (SELECT count(*) FROM user_reports WHERE true${dateFilter})::int AS reports
+      `, params);
 
       const s = rows[0] || {
         total_users: 0,
@@ -159,7 +192,17 @@ class AdminController {
 
       return res.json({
         ...s,
-        free_users: Math.max(0, totalUsers - paidUsers)
+        free_users: Math.max(0, totalUsers - paidUsers),
+        filter_period: period,
+        ...(period === "custom" ? {
+          filter_from: req.query.from || req.query.dashboard_from,
+          filter_to: req.query.to || req.query.dashboard_to
+        } : {}),
+        revenue_period: period,
+        ...(period === "custom" ? {
+          revenue_from: req.query.from || req.query.dashboard_from,
+          revenue_to: req.query.to || req.query.dashboard_to
+        } : {})
       });
     } catch (err) {
       console.error("Admin getStats error:", err);

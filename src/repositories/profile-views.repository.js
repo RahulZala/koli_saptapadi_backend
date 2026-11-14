@@ -1,4 +1,6 @@
 const pool = require("../config/database");
+const blockRepository = require("./block.repository");
+const privacyRepository = require("./privacy.repository");
 
 class ProfileViewsRepository {
   async ensureTable() {
@@ -32,12 +34,21 @@ class ProfileViewsRepository {
 
   async getViewersList(viewedUserId, page = 1, limit = 20) {
     await this.ensureTable();
+    await blockRepository.ensureTable();
+    await privacyRepository.ensureColumns();
     page = parseInt(page, 10) || 1;
     limit = parseInt(limit, 10) || 20;
     const offset = (page - 1) * limit;
 
     const [countRows] = await pool.execute(
-      "SELECT COUNT(DISTINCT user_id) AS total_views FROM profile_views WHERE viewed_user_id = $1",
+      `SELECT COUNT(DISTINCT pv.user_id) AS total_views
+       FROM profile_views pv
+       WHERE pv.viewed_user_id = $1
+         AND NOT EXISTS (
+           SELECT 1 FROM user_blocks b
+           WHERE (b.blocker_id = $1 AND b.blocked_id = pv.user_id)
+              OR (b.blocker_id = pv.user_id AND b.blocked_id = $1)
+         )`,
       [viewedUserId]
     );
     const totalViews = parseInt(countRows[0]?.total_views || 0, 10);
@@ -47,12 +58,27 @@ class ProfileViewsRepository {
         pv.user_id, pv.created_at AS viewed_at,
         u.first_name, u.last_name, u.sub_caste, u.dob,
         mp.occupation, mp.work_city,
-        up.profile, u.is_verified
+        CASE
+          WHEN COALESCE(u.photo_privacy, 'public') = 'public'
+            OR EXISTS (
+              SELECT 1 FROM interests i
+              WHERE i.status = 'accepted'
+                AND ((i.from_user = pv.user_id AND i.to_user = $1)
+                  OR (i.from_user = $1 AND i.to_user = pv.user_id))
+            )
+          THEN up.profile ELSE NULL
+        END AS profile,
+        u.is_verified
       FROM profile_views pv
       INNER JOIN users u ON u.id = pv.user_id
       LEFT JOIN marital_professional_details mp ON mp.user_id = u.id
       LEFT JOIN user_document up ON up.user_id = u.id
       WHERE pv.viewed_user_id = $1
+        AND NOT EXISTS (
+          SELECT 1 FROM user_blocks b
+          WHERE (b.blocker_id = $1 AND b.blocked_id = pv.user_id)
+             OR (b.blocker_id = pv.user_id AND b.blocked_id = $1)
+        )
       ORDER BY pv.user_id, pv.created_at DESC
       LIMIT $2 OFFSET $3
     `;

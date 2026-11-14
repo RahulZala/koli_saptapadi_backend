@@ -2,6 +2,7 @@ const express = require("express");
 const jwt = require("jsonwebtoken");
 const env = require("../config/env");
 const adminController = require("../controllers/admin.controller");
+const adminMasterDataController = require("../controllers/admin-master-data.controller");
 
 const router = express.Router();
 
@@ -58,5 +59,9 @@ router.get("/plans", authenticateAdmin, adminController.getPlans);
 router.patch("/plans/:id", authenticateAdmin, adminController.updatePlan);
 router.get("/reports", authenticateAdmin, adminController.getReports);
 router.post("/notifications/send", authenticateAdmin, adminController.sendNotification);
+router.get("/master-data", authenticateAdmin, adminMasterDataController.getMasterData);
+router.post("/master-data/:type", authenticateAdmin, adminMasterDataController.createEntry);
+router.patch("/master-data/:type/:id", authenticateAdmin, adminMasterDataController.updateEntry);
+router.delete("/master-data/:type/:id", authenticateAdmin, adminMasterDataController.removeEntry);
 
 module.exports = router;

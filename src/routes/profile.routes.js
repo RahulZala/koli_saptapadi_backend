@@ -12,5 +12,6 @@ router.post("/manage_address", authenticateUser, profileController.manageAddress
 router.post("/manage_marital_professional_details", authenticateUser, profileController.addMaritalDetails);
 router.post("/manage_partner_preference", authenticateUser, profileController.savePartnerPreferences);
 router.post("/view_profile", authenticateUser, profileController.viewProfile);
+router.post("/manage_profile_block", authenticateUser, profileController.manageProfileBlock);
 
 module.exports = router;

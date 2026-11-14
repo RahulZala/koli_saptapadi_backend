@@ -4,6 +4,7 @@ class ReferralRepository {
   async ensureTable() {
     try {
       await pool.query(`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(20) UNIQUE;
         CREATE TABLE IF NOT EXISTS user_referrals (
           id SERIAL PRIMARY KEY,
           referrer_id INT NOT NULL,
@@ -16,6 +17,56 @@ class ReferralRepository {
       `);
     } catch (err) {
       console.warn("Notice ensuring user_referrals table:", err.message);
+    }
+  }
+
+  generateRandomCode() {
+    // 6-character random alphanumeric string (avoiding confusing chars 0/O, 1/I)
+    const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+    let randomPart = "";
+    for (let i = 0; i < 6; i++) {
+      randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `KOLI${randomPart}`;
+  }
+
+  async getUserReferralCode(userId) {
+    await this.ensureTable();
+    try {
+      const [rows] = await pool.execute(
+        "SELECT referral_code FROM users WHERE id = $1",
+        [userId]
+      );
+      if (rows && rows.length > 0 && rows[0].referral_code) {
+        return rows[0].referral_code;
+      }
+
+      // Generate unique random code (preventing collision)
+      let uniqueCode = "";
+      let isUnique = false;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        uniqueCode = this.generateRandomCode();
+        const [existing] = await pool.execute(
+          "SELECT id FROM users WHERE referral_code = $1",
+          [uniqueCode]
+        );
+        if (!existing || existing.length === 0) {
+          isUnique = true;
+          break;
+        }
+      }
+      if (!isUnique) {
+        uniqueCode = `KOLI${userId}${Date.now().toString().slice(-3)}`;
+      }
+
+      await pool.execute(
+        "UPDATE users SET referral_code = $1 WHERE id = $2",
+        [uniqueCode, userId]
+      );
+      return uniqueCode;
+    } catch (err) {
+      console.warn("Notice getting user referral code:", err.message);
+      return this.generateRandomCode();
     }
   }
 
@@ -66,24 +117,43 @@ class ReferralRepository {
 
   async applyReferralCode(referredUserId, referralCode) {
     await this.ensureTable();
-    // Parse referral code format: KOLI<userId>
-    const match = String(referralCode).trim().toUpperCase().match(/^KOLI(\d+)$/);
-    if (!match) {
+    const cleanCode = String(referralCode || "").trim().toUpperCase();
+    if (!cleanCode || cleanCode.length < 5) {
       return { success: 0, message: "Invalid referral code format" };
     }
 
-    const referrerId = parseInt(match[1], 10);
-    if (referrerId === referredUserId) {
-      return { success: 0, message: "You cannot use your own referral code" };
-    }
-
     try {
-      const [referrerExists] = await pool.execute("SELECT id FROM users WHERE id = $1", [referrerId]);
-      if (!referrerExists || referrerExists.length === 0) {
+      // 1. Look up referrer by unique referral_code in users table
+      let [referrerRows] = await pool.execute(
+        "SELECT id FROM users WHERE UPPER(referral_code) = $1",
+        [cleanCode]
+      );
+
+      // Fallback for legacy format KOLI<userId>
+      if (!referrerRows || referrerRows.length === 0) {
+        const legacyMatch = cleanCode.match(/^KOLI(\d+)$/);
+        if (legacyMatch) {
+          const legacyId = parseInt(legacyMatch[1], 10);
+          [referrerRows] = await pool.execute(
+            "SELECT id FROM users WHERE id = $1",
+            [legacyId]
+          );
+        }
+      }
+
+      if (!referrerRows || referrerRows.length === 0) {
         return { success: 0, message: "Referral code not found" };
       }
 
-      const [alreadyClaimed] = await pool.execute("SELECT id FROM user_referrals WHERE referred_id = $1", [referredUserId]);
+      const referrerId = referrerRows[0].id;
+      if (referrerId === referredUserId) {
+        return { success: 0, message: "You cannot use your own referral code" };
+      }
+
+      const [alreadyClaimed] = await pool.execute(
+        "SELECT id FROM user_referrals WHERE referred_id = $1",
+        [referredUserId]
+      );
       if (alreadyClaimed && alreadyClaimed.length > 0) {
         return { success: 0, message: "You have already claimed a referral bonus" };
       }
@@ -91,7 +161,7 @@ class ReferralRepository {
       // Record successful referral record
       await pool.execute(
         "INSERT INTO user_referrals (referrer_id, referred_id, referral_code, bonus_credits) VALUES ($1, $2, $3, 3)",
-        [referrerId, referredUserId, referralCode.toUpperCase()]
+        [referrerId, referredUserId, cleanCode]
       );
 
       // Award exactly 3 send interests to BOTH sides successfully

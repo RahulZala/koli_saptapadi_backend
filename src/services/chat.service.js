@@ -1,22 +1,49 @@
 const chatRepository = require("../repositories/chat.repository");
 const interestRepository = require("../repositories/interest.repository");
+const userRepository = require("../repositories/user.repository");
+const blockRepository = require("../repositories/block.repository");
 const notificationService = require("./notification.service");
 const pool = require("../config/database");
 
+function positiveInteger(value) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 class ChatService {
   async sendMessage(senderId, receiverId, message, messageType = "text") {
-    if (!receiverId || parseInt(receiverId, 10) <= 0) {
+    const recipientId = positiveInteger(receiverId);
+    if (!recipientId) {
       return { success: 0, message: "Recipient user ID is required" };
     }
-    if (parseInt(senderId, 10) === parseInt(receiverId, 10)) {
+    if (positiveInteger(senderId) === recipientId) {
       return { success: 0, message: "Cannot send message to yourself" };
     }
-    if (!message || !String(message).trim()) {
+    if (typeof message !== "string" || !message.trim()) {
       return { success: 0, message: "Message content cannot be empty" };
     }
+    if (message.trim().length > 2000) {
+      return { success: 0, message: "Messages cannot exceed 2000 characters" };
+    }
+    if (messageType !== "text") {
+      return { success: 0, message: "Only text messages are supported" };
+    }
 
-    // Security Rule 1: Mutual Interest Verification
-    const hasAccepted = await interestRepository.hasAcceptedInterest(senderId, receiverId);
+    // 1. Safety Ban Check: If either party reported the other, chat is banned ONLY between this specific pair!
+    const isReported = await userRepository.isReportedBetween(senderId, recipientId);
+    if (isReported) {
+      return {
+        success: 0,
+        chat_blocked: true,
+        message: "Chat has been disabled between you and this member due to a safety report."
+      };
+    }
+    if (await blockRepository.isBlockedBetween(senderId, recipientId)) {
+      return { success: 0, chat_blocked: true, message: "Chat is unavailable for this profile" };
+    }
+
+    // 2. Matrimonial Gatekeeper: Mutual interest must be accepted
+    const hasAccepted = await interestRepository.hasAcceptedInterest(senderId, recipientId);
     if (!hasAccepted) {
       return {
         success: 0,
@@ -24,16 +51,17 @@ class ChatService {
       };
     }
 
-    // Security Rule 2: Active Plan Check
+    // 3. Subscription Check: User must have an active subscription plan to access chat
     const activeSub = await interestRepository.getActiveSubscription(senderId);
-    if (!activeSub || activeSub.remaining_interests <= 0) {
+    if (!activeSub) {
       return {
         success: 0,
-        message: "Your subscription plan is expired or inactive. Please upgrade to chat."
+        message: "Your subscription plan is inactive or expired. Please purchase a plan to chat."
       };
     }
 
-    const saved = await chatRepository.sendMessage(senderId, receiverId, String(message).trim(), messageType);
+    // 4. Unlimited Instant Messaging inside chat: No per-message credit deduction!
+    const saved = await chatRepository.sendMessage(senderId, recipientId, message.trim(), messageType);
 
     // Push notification to recipient
     try {
@@ -41,7 +69,7 @@ class ChatService {
       const senderName = senderRows[0] ? `${senderRows[0].first_name} ${senderRows[0].last_name}`.trim() : "Someone";
       await notificationService.createAndSendNotification(
         senderId,
-        receiverId,
+        recipientId,
         `New Message from ${senderName}`,
         String(message).slice(0, 100),
         "chat_message",
@@ -59,29 +87,58 @@ class ChatService {
   }
 
   async getMessages(userId, partnerId, page = 1, limit = 50) {
-    if (!partnerId) {
-      return { success: 0, message: "Partner user ID required" };
+    const otherUserId = positiveInteger(partnerId);
+    const requestedPage = Number(page);
+    const requestedLimit = Number(limit);
+    if (!otherUserId) {
+      return { success: 0, message: "A valid partner user ID is required" };
+    }
+    if (!Number.isSafeInteger(requestedPage) || requestedPage < 1) {
+      return { success: 0, message: "Page must be a positive integer" };
+    }
+    if (!Number.isSafeInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 100) {
+      return { success: 0, message: "Limit must be between 1 and 100" };
     }
 
-    const hasAccepted = await interestRepository.hasAcceptedInterest(userId, partnerId);
+    // 1. Safety Ban Check: Banned only between this reported pair
+    const isReported = await userRepository.isReportedBetween(userId, otherUserId);
+    if (isReported) {
+      return {
+        success: 0,
+        chat_blocked: true,
+        message: "Chat between you and this member has been disabled due to a safety report."
+      };
+    }
+    if (await blockRepository.isBlockedBetween(userId, otherUserId)) {
+      return { success: 0, chat_blocked: true, message: "Chat is unavailable for this profile" };
+    }
+
+    // 2. Mutual Interest Verification
+    const hasAccepted = await interestRepository.hasAcceptedInterest(userId, otherUserId);
     if (!hasAccepted) {
       return {
         success: 0,
-        message: "Access denied. Chat history only available for accepted matches."
+        message: "Direct messaging is locked until mutual interest is accepted."
       };
     }
 
-    const messages = await chatRepository.getMessages(userId, partnerId, page, limit);
+    // Fetch conversation message history with zero restriction once matched
+    const messages = await chatRepository.getMessages(userId, otherUserId, requestedPage, requestedLimit);
     return {
       success: 1,
       data: {
-        partner_id: parseInt(partnerId, 10),
+        partner_id: otherUserId,
+        page: requestedPage,
+        limit: requestedLimit,
+        has_more: messages.length === requestedLimit,
         messages
       }
     };
   }
 
   async getConversations(userId) {
+    await userRepository.ensureReportTable();
+    await blockRepository.ensureTable();
     const conversations = await chatRepository.getConversations(userId);
     return {
       success: 1,

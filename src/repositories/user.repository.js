@@ -114,6 +114,35 @@ class UserRepository {
     );
     return rows[0] ? parseInt(rows[0].total, 10) : 0;
   }
+
+  async ensureReportTable() {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS user_reports (
+          id SERIAL PRIMARY KEY,
+          from_user_id INT NOT NULL,
+          to_user_id INT NOT NULL,
+          reason TEXT NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_reports_pair ON user_reports(from_user_id, to_user_id);
+      `);
+    } catch (err) {
+      console.warn("Notice ensuring user_reports table:", err.message);
+    }
+  }
+
+  async isReportedBetween(user1, user2) {
+    await this.ensureReportTable();
+    const [rows] = await pool.execute(
+      `SELECT id FROM user_reports
+       WHERE (from_user_id = $1 AND to_user_id = $2)
+          OR (from_user_id = $2 AND to_user_id = $1)
+       LIMIT 1`,
+      [user1, user2]
+    );
+    return rows.length > 0;
+  }
 }
 
 module.exports = new UserRepository();

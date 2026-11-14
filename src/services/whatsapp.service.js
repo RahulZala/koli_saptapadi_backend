@@ -43,30 +43,31 @@ class WhatsAppService {
 
   /**
    * Format phone number for WhatsApp recipient:
-   * Requires country code prefix without '+' or special symbols (e.g. 919876543210)
+  * Formats the country-coded number as E.164 with a leading '+' (e.g. +919876543210)
    * @param {string} phone
    * @returns {string}
    */
   formatReceiver(phone) {
     if (!phone) return "";
     let digits = String(phone).trim().replace(/\D/g, "");
+    if (!digits) return "";
 
     // 10-digit Indian mobile number -> prepend 91
     if (digits.length === 10) {
-      return `91${digits}`;
+      return `+91${digits}`;
     }
 
     // 11-digit starting with 0 -> replace 0 with 91
     if (digits.length === 11 && digits.startsWith("0")) {
-      return `91${digits.substring(1)}`;
+      return `+91${digits.substring(1)}`;
     }
 
     // 12-digit starting with 91 -> return as is
     if (digits.length === 12 && digits.startsWith("91")) {
-      return digits;
+      return `+${digits}`;
     }
 
-    return digits;
+    return `+${digits}`;
   }
 
   /**
@@ -209,7 +210,7 @@ class WhatsAppService {
    * @param {string} [langCode="en"]
    * @returns {object}
    */
-  buildAuthTemplatePayload(receiver, otp, templateName = "auth", langCode = "en") {
+  buildAuthTemplatePayload(receiver, otp, templateName = "auth", langCode = this.languageCode) {
     return this.buildTemplatePayload(receiver, templateName, [otp], { langCode });
   }
 
@@ -221,7 +222,7 @@ class WhatsAppService {
    * @param {string} [langCode="en"] - Language code passed as a parameter
    * @returns {Promise<{success: boolean, message: string, data?: any, raw?: any}>}
    */
-  async sendAuthOTP(phone, otp, templateName = "auth", langCode = "en") {
+  async sendAuthOTP(phone, otp, templateName = "auth", langCode = this.languageCode) {
     if (!phone) {
       return { success: false, message: "Recipient phone number is required" };
     }
@@ -299,6 +300,19 @@ class WhatsAppService {
         responseData = { rawResponse: responseText };
       }
 
+      const queuedResponse = [
+        responseData,
+        responseData.data,
+        responseData.data?.message,
+        responseData.message,
+        responseData.result,
+        responseData.result?.message,
+        responseData.error,
+        responseData.error?.message
+      ]
+        .find((result) => result && typeof result === "object" &&
+          String(result.message_status || result.status || "").toLowerCase() === "queued" &&
+          (result.queue_id || result.queueId));
       const isOk =
         response.ok &&
         (responseData.success === true ||
@@ -306,22 +320,27 @@ class WhatsAppService {
           responseData.queueId ||
           responseData.messages ||
           responseData.status === "success" ||
-          responseData.submitted === true);
+          responseData.submitted === true ||
+          queuedResponse);
 
       if (isOk) {
         return {
           success: true,
-          message: "WhatsApp message sent successfully",
+          status: queuedResponse ? "queued" : "sent",
+          message: queuedResponse ? "WhatsApp message queued successfully" : "WhatsApp message sent successfully",
           data: responseData,
           raw: responseData
         };
       }
 
-      const errorMsg =
+      const errorValue =
         responseData.error ||
         responseData.message ||
         responseData.msg ||
         (responseData.errors ? JSON.stringify(responseData.errors) : `HTTP ${response.status}`);
+      const errorMsg = typeof errorValue === "string"
+        ? errorValue
+        : errorValue?.message || JSON.stringify(errorValue);
 
       return {
         success: false,

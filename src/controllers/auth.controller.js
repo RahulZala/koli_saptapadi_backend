@@ -14,9 +14,11 @@ class AuthController {
   async sendOTP(req, res, next) {
     try {
       const phone = req.body.phone || req.body.to || req.query.phone || req.query.to;
+      if (!phone) {
+        return res.status(400).json({ success: 0, message: "Phone number required" });
+      }
       const result = await authService.sendOTP(phone);
-      const statusCode = result.success === 1 ? 200 : 200;
-      return res.status(200).json(result);
+      return res.status(result.success === 1 ? 200 : 502).json(result);
     } catch (err) {
       next(err);
     }

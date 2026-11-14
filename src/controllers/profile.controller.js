@@ -84,6 +84,16 @@ class ProfileController {
       next(err);
     }
   }
+
+  async manageProfileBlock(req, res, next) {
+    try {
+      const { profile_user_id, action } = req.body;
+      const result = await profileService.manageProfileBlock(req.userId, profile_user_id, action);
+      return res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 module.exports = new ProfileController();

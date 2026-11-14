@@ -13,8 +13,9 @@ class UserController {
 
   async reportUser(req, res, next) {
     try {
-      const { to_user_id, reason } = req.body;
-      const result = await userService.reportUser(req.userId, to_user_id, reason);
+      const toUserId = req.body.to_user_id || req.body.profile_user_id || req.body.partner_id;
+      const reasonText = req.body.reason || req.body.Reason || "Reported by user";
+      const result = await userService.reportUser(req.userId, toUserId, reasonText);
       return res.status(200).json(result);
     } catch (err) {
       next(err);

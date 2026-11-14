@@ -26,7 +26,10 @@ class MasterRepository {
 
   async getSubCastes() {
     const [rows] = await pool.execute(
-      "SELECT id, name FROM sub_castes WHERE is_active = true"
+      `SELECT id, name
+       FROM sub_castes
+       WHERE is_active::text IN ('1', 'true', 't')
+       ORDER BY name ASC`
     );
     return rows;
   }

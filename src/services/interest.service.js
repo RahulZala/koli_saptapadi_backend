@@ -1,109 +1,102 @@
-const pool = require("../config/database");
 const interestRepository = require("../repositories/interest.repository");
+const blockRepository = require("../repositories/block.repository");
+const privacyRepository = require("../repositories/privacy.repository");
 const notificationService = require("./notification.service");
 const userRepository = require("../repositories/user.repository");
 const { timeAgo } = require("../utils/dates");
 
 class InterestService {
   async manageInterest(toUserId, fromUserId, action, interestId = null) {
-    const sub = await interestRepository.getActiveSubscription(fromUserId);
-    if (!sub) {
-      return { success: 0, message: "Subscription required" };
-    }
-
-    if (["accept", "reject"].includes(action) && !interestId) {
-      return { success: 0, message: "Please share interest person" };
-    }
-
-    if (action === "send" || action === "accept") {
-      // Record profile view
-      await pool.execute(
-        "INSERT INTO profile_views (user_id, viewed_user_id) VALUES ($1, $2)",
-        [fromUserId, toUserId]
-      );
+    if (toUserId && await blockRepository.isBlockedBetween(fromUserId, toUserId)) {
+      return { success: 0, message: "This profile is unavailable" };
     }
 
     if (action === "send") {
-      const alreadySent = await interestRepository.checkExistingInterest(fromUserId, toUserId);
-      if (alreadySent) {
-        return { success: 0, message: "Already sent" };
+      const receiverId = parseInt(toUserId, 10);
+      if (!receiverId || receiverId <= 0 || receiverId === parseInt(fromUserId, 10)) {
+        return { success: 0, message: "A valid different profile is required" };
       }
 
-      const consumeRes = await interestRepository.consumeProfileView(fromUserId);
-      if (!consumeRes.success) {
-        return { success: 0, message: consumeRes.message };
+      await privacyRepository.ensureColumns();
+      const request = await interestRepository.sendInterest(fromUserId, receiverId);
+      if (!request || request.error) {
+        return { success: 0, message: request?.error || "Could not send request" };
       }
-
-      const insertId = await interestRepository.sendInterest(fromUserId, toUserId);
-
-      // Trigger Push & Save Notification
-      const senderUser = await userRepository.findById(fromUserId);
-      const userName = senderUser ? `${senderUser.first_name || ""} ${senderUser.last_name || ""}`.trim() : "User";
-
-      await notificationService.createAndSendNotification(
-        fromUserId,
-        toUserId,
-        "New Interest Received",
-        `${userName} has shown interest in your profile`,
-        "interest_send",
-        insertId
-      );
-
-      return { success: 1, message: "Interest sent successfully" };
-    } else if (action === "accept") {
-      const interest = await interestRepository.getInterestById(interestId, fromUserId);
-      if (!interest || interest.status !== "pending") {
-        return { success: 0, message: "Invalid interest" };
-      }
-
-      await interestRepository.updateInterestStatus(interestId, "accepted");
-
-      // Deduct interest view count from receiver
-      await pool.execute(
-        "UPDATE user_subscriptions SET remaining_interests = remaining_interests - 1 WHERE user_id = $1 AND remaining_interests > 0 AND is_active = 1",
-        [fromUserId]
-      );
 
       const senderUser = await userRepository.findById(fromUserId);
       const userName = senderUser ? `${senderUser.first_name || ""} ${senderUser.last_name || ""}`.trim() : "User";
 
-      await notificationService.createAndSendNotification(
-        fromUserId,
-        interest.from_user,
-        "Interest Accepted",
-        `${userName} accepted your interest`,
-        "interest_accept",
-        interestId
-      );
-
-      return { success: 1, message: "Interest accepted successfully" };
-    } else if (action === "reject") {
-      const interest = await interestRepository.getInterestById(interestId, fromUserId);
-      if (!interest || interest.status !== "pending") {
-        return { success: 0, message: "Invalid interest" };
+      try {
+        await notificationService.createAndSendNotification(
+          fromUserId,
+          receiverId,
+          "New Profile Request",
+          `${userName} has sent you a profile request`,
+          "interest_send",
+          request.id
+        );
+      } catch (err) {
+        console.warn("Notice sending profile request notification:", err.message);
       }
 
-      await interestRepository.updateInterestStatus(interestId, "rejected");
+      return {
+        success: 1,
+        message: "Profile request sent successfully",
+        data: { interest_id: request.id, status: "pending" }
+      };
+    }
 
-      const senderUser = await userRepository.findById(fromUserId);
-      const userName = senderUser ? `${senderUser.first_name || ""} ${senderUser.last_name || ""}`.trim() : "User";
+    if (action === "cancel") {
+      if (!interestId) return { success: 0, message: "Request ID is required" };
+      const cancelled = await interestRepository.cancelInterest(interestId, fromUserId);
+      if (!cancelled) {
+        return { success: 0, message: "Only your pending request can be cancelled" };
+      }
+      return {
+        success: 1,
+        message: "Profile request cancelled",
+        data: { interest_id: cancelled.id, status: "cancelled" }
+      };
+    }
 
-      await notificationService.createAndSendNotification(
-        fromUserId,
-        interest.from_user,
-        "Interest Declined",
-        `${userName} declined your interest`,
-        "interest_reject",
-        interestId
-      );
+    if (action === "accept" || action === "reject") {
+      if (!interestId) return { success: 0, message: "Request ID is required" };
+      const status = action === "accept" ? "accepted" : "rejected";
+      const updated = await interestRepository.respondToInterest(interestId, fromUserId, status);
+      if (!updated) {
+        return { success: 0, message: "Only the recipient can respond to a pending request" };
+      }
 
-      return { success: 1, message: "Interest rejected successfully" };
+      const receiverUser = await userRepository.findById(fromUserId);
+      const userName = receiverUser
+        ? `${receiverUser.first_name || ""} ${receiverUser.last_name || ""}`.trim()
+        : "User";
+      try {
+        await notificationService.createAndSendNotification(
+          fromUserId,
+          updated.from_user,
+          action === "accept" ? "Profile Request Accepted" : "Profile Request Declined",
+          `${userName} ${action === "accept" ? "accepted" : "declined"} your profile request`,
+          action === "accept" ? "interest_accept" : "interest_reject",
+          updated.id
+        );
+      } catch (err) {
+        console.warn("Notice sending profile request response notification:", err.message);
+      }
+
+      return {
+        success: 1,
+        message: action === "accept" ? "Profile request accepted" : "Profile request declined",
+        data: { interest_id: updated.id, status: updated.status }
+      };
     }
 
     return { success: 0, message: "Invalid action" };
   }
 
   async getInterests(userId, type) {
+    await blockRepository.ensureTable();
+    await privacyRepository.ensureColumns();
     const list = await interestRepository.getInterestsList(userId, parseInt(type, 10));
     const data = list.map((row) => ({
       ...row,

@@ -63,6 +63,25 @@ curl -X POST http://localhost:3000/api/calls/get_districts \
   -d '{"state_id": 1}'
 ```
 
+### Admin master-data management
+
+The admin token is returned by `/api/admin/auth/verify-otp`. Use it for these protected endpoints:
+
+```text
+GET    /api/admin/master-data
+POST   /api/admin/master-data/states
+POST   /api/admin/master-data/districts
+POST   /api/admin/master-data/cities
+POST   /api/admin/master-data/sub_castes
+PATCH  /api/admin/master-data/{states|districts|cities|sub_castes}/:id
+DELETE /api/admin/master-data/{states|districts|cities|sub_castes}/:id
+Authorization: Bearer <admin-token>
+```
+
+Districts require `state_id`; cities require `district_id`; all creates and edits require `name`. Sub-caste `PATCH` also accepts `is_active: true|false`. Deleting a sub-caste disables it so existing profiles remain valid. Location deletion returns `409` while child locations or user addresses still reference the record.
+
+These endpoints use the existing `states`, `districts`, `cities`, `sub_castes`, and `user_addresses` tables; no schema migration is required.
+
 ---
 
 ## 4. Legacy Route Aliasing Test

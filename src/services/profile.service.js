@@ -2,6 +2,8 @@ const pool = require("../config/database");
 const profileRepository = require("../repositories/profile.repository");
 const interestRepository = require("../repositories/interest.repository");
 const userRepository = require("../repositories/user.repository");
+const privacyRepository = require("../repositories/privacy.repository");
+const blockRepository = require("../repositories/block.repository");
 
 class ProfileService {
   async getProfileCompletion(userId) {
@@ -352,44 +354,108 @@ class ProfileService {
   }
 
   async getPartnerProfile(userId, profileUserId) {
-    const hasAccepted = await interestRepository.hasAcceptedInterest(userId, profileUserId);
-    if (!hasAccepted) {
+    const targetId = parseInt(profileUserId, 10);
+    if (!targetId || targetId <= 0) {
+      return { success: 0, message: "A valid profile ID is required" };
+    }
+
+    const isSelf = parseInt(userId, 10) === targetId;
+    const blockStatus = isSelf
+      ? { blockedByMe: false, blockingMe: false }
+      : await blockRepository.getBlockStatus(userId, targetId);
+    if (blockStatus.blockingMe) {
+      return { success: 0, message: "This profile is unavailable" };
+    }
+    if (blockStatus.blockedByMe) {
       return {
-        success: 0,
-        message: "Access denied. You have not accepted interest from this profile."
+        success: 1,
+        data: {
+          relationship_status: "blocked",
+          blocked_by_me: true,
+          can_send_request: false
+        }
       };
     }
+    const [pairRequests, privacy] = await Promise.all([
+      isSelf ? [] : interestRepository.getPairRequests(userId, targetId),
+      privacyRepository.getPrivacySettings(targetId)
+    ]);
+    const accepted = isSelf || pairRequests.some((request) => request.status === "accepted");
+    const pendingRequest = pairRequests.find((request) => request.status === "pending");
+    const rejectedRequest = pairRequests.find((request) => request.status === "rejected");
 
-    const sub = await interestRepository.getActiveSubscription(userId);
-    if (!sub) {
-      return {
-        success: 0,
-        message: "Subscription expired. Please subscribe to view partner profiles."
-      };
+    if (!isSelf && privacy.profile_status !== "active") {
+      return { success: 0, message: "This profile is not currently available" };
     }
 
-    if (sub.remaining_interests <= 0) {
-      return { success: 0, message: "Profile view limit exceeded" };
-    }
+    const relationshipStatus = isSelf
+      ? "self"
+      : accepted
+        ? "accepted"
+        : pendingRequest
+          ? "pending"
+          : rejectedRequest
+            ? "rejected"
+            : "none";
+    const requestDirection = pendingRequest
+      ? (parseInt(pendingRequest.from_user, 10) === parseInt(userId, 10) ? "outgoing" : "incoming")
+      : null;
+    const canSendRequest = !isSelf &&
+      !accepted &&
+      !pendingRequest &&
+      !pairRequests.some((request) =>
+        request.status === "rejected" && parseInt(request.from_user, 10) === parseInt(userId, 10)
+      );
+    const canViewPhone = isSelf ||
+      privacy.phone_visibility === "public" ||
+      (accepted && ["on_accept", "request_only"].includes(privacy.phone_visibility));
+    const canViewEmail = isSelf || accepted;
+    const canViewPhotos = isSelf || accepted || privacy.photo_privacy === "public";
+    const contactColumns = [
+      canViewPhone ? "u.phone" : null,
+      canViewEmail ? "u.email" : null
+    ].filter(Boolean).join(", ");
+    const photoColumn = canViewPhotos ? "ud.profile" : "NULL AS profile";
 
+    const publicColumns = `
+      u.id, u.first_name, u.last_name, u.sub_caste, u.gender,
+      EXTRACT(YEAR FROM age(CURRENT_DATE, u.dob)) AS age,
+      pd.height, pd.marital_status,
+      mpd.highest_degree, mpd.degree, mpd.occupation, mpd.work_city,
+      ${photoColumn}, u.is_active, u.is_verified, u.created_at
+      ${contactColumns ? `, ${contactColumns}` : ""}
+    `;
+    const connectedColumns = `
+      u.id, u.first_name, u.last_name, u.sub_caste, u.gender, u.dob, u.profile_for,
+      EXTRACT(YEAR FROM age(CURRENT_DATE, u.dob)) AS age,
+      pd.height, pd.weight, pd.smoking, pd.drinking, pd.diet, pd.is_disabled,
+      pd.disability_details, pd.languages_known, pd.manglik, pd.marital_status,
+      pd.thalassemia_status,
+      fd.father_name, fd.mother_name, fd.maternal_surname, fd.siblings,
+      fd.family_type, fd.father_occupations,
+      mpd.highest_degree, mpd.university_name, mpd.degree, mpd.annual_income,
+      mpd.occupation, mpd.work_city,
+      pp.age_min, pp.age_max, pp.height_min, pp.height_max, pp.weight_min,
+      pp.weight_max, pp.preferred_marital_status, pp.preferred_education,
+      pp.preferred_occupation,
+      ${photoColumn}, u.is_active, u.is_verified, u.created_at
+      ${contactColumns ? `, ${contactColumns}` : ""}
+    `;
+    const profileColumns = accepted ? connectedColumns : publicColumns;
+    const joins = accepted
+      ? `LEFT JOIN physical_details pd ON pd.user_id = u.id
+         LEFT JOIN family_details fd ON fd.user_id = u.id
+         LEFT JOIN marital_professional_details mpd ON mpd.user_id = u.id
+         LEFT JOIN partner_preferences pp ON pp.user_id = u.id`
+      : `LEFT JOIN physical_details pd ON pd.user_id = u.id
+         LEFT JOIN marital_professional_details mpd ON mpd.user_id = u.id`;
     const [rows] = await pool.execute(
-      `SELECT 
-        u.id, u.first_name, u.last_name, u.sub_caste, u.email, u.gender, u.dob, u.phone, u.profile_for,
-        EXTRACT(YEAR FROM age(CURRENT_DATE, u.dob)) AS age,
-        pd.height, pd.weight, pd.smoking, pd.drinking, pd.diet, pd.is_disabled, pd.disability_details, pd.languages_known, pd.manglik, pd.marital_status, pd.thalassemia_status,
-        fd.father_name, fd.mother_name, fd.maternal_surname, fd.siblings, fd.family_type, fd.father_occupations,
-        mpd.highest_degree, mpd.university_name, mpd.degree, mpd.annual_income, mpd.occupation, mpd.work_city,
-        pp.age_min, pp.age_max, pp.height_min, pp.height_max, pp.weight_min, pp.weight_max, pp.preferred_marital_status, pp.preferred_education, pp.preferred_occupation,
-        ud.profile,
-        u.is_active, u.created_at
-      FROM users u
-      LEFT JOIN physical_details pd ON pd.user_id = u.id
-      LEFT JOIN family_details fd ON fd.user_id = u.id
-      LEFT JOIN marital_professional_details mpd ON mpd.user_id = u.id
-      LEFT JOIN partner_preferences pp ON pp.user_id = u.id
-      LEFT JOIN user_document ud ON ud.user_id = u.id
-      WHERE u.id = $1`,
-      [profileUserId]
+      `SELECT ${profileColumns}
+       FROM users u
+       ${joins}
+       LEFT JOIN user_document ud ON ud.user_id = u.id
+       WHERE u.id = $1`,
+      [targetId]
     );
 
     if (rows.length === 0) {
@@ -397,19 +463,105 @@ class ProfileService {
     }
 
     const data = rows[0];
-    const [photoRows] = await pool.execute(
-      "SELECT image_url FROM user_photos WHERE user_id = $1 ORDER BY id ASC",
-      [profileUserId]
-    );
-    data.images = photoRows.map((p) => p.image_url);
+    data.height = data.height === null || data.height === undefined ? "" : String(data.height);
+    data.marital_status = data.marital_status || "";
+    data.degree = data.degree || "";
+    data.highest_degree = data.highest_degree || "";
+    data.occupation = data.occupation || "";
+    data.work_city = data.work_city || "";
+    if (!accepted) {
+      Object.assign(data, {
+        dob: "",
+        profile_for: "",
+        weight: 0,
+        smoking: "",
+        drinking: "",
+        diet: "",
+        is_disabled: "",
+        disability_details: "",
+        languages_known: "",
+        manglik: "",
+        thalassemia_status: "",
+        father_name: "",
+        mother_name: "",
+        maternal_surname: "",
+        siblings: 0,
+        family_type: "",
+        father_occupations: "",
+        university_name: "",
+        annual_income: "",
+        age_min: 0,
+        age_max: 0,
+        height_min: "",
+        height_max: "",
+        weight_min: 0,
+        weight_max: 0,
+        preferred_marital_status: "",
+        preferred_education: "",
+        preferred_occupation: ""
+      });
+    }
+    if (canViewPhotos) {
+      const [photoRows] = await pool.execute(
+        "SELECT image_url FROM user_photos WHERE user_id = $1 ORDER BY id ASC",
+        [targetId]
+      );
+      data.images = photoRows.map((photo) => photo.image_url);
+    } else {
+      data.images = [];
+    }
+    data.relationship_status = relationshipStatus;
+    data.request_direction = requestDirection;
+    data.request_id = pendingRequest ? pendingRequest.id : null;
+    data.can_send_request = canSendRequest;
+    data.blocked_by_me = false;
 
     return { success: 1, data };
   }
 
-  async getImages(userId) {
+  async manageProfileBlock(userId, profileUserId, action) {
+    const targetId = parseInt(profileUserId, 10);
+    if (!targetId || targetId <= 0 || targetId === parseInt(userId, 10)) {
+      return { success: 0, message: "A valid different profile is required" };
+    }
+    if (action !== "block" && action !== "unblock") {
+      return { success: 0, message: "Invalid block action" };
+    }
+    if (action === "block") {
+      const [users] = await pool.execute("SELECT id FROM users WHERE id = $1 AND is_active = true", [targetId]);
+      if (!users.length) {
+        return { success: 0, message: "This profile is unavailable" };
+      }
+    }
+    await blockRepository.setBlock(userId, targetId, action === "block");
+    return {
+      success: 1,
+      message: action === "block" ? "Profile blocked" : "Profile unblocked",
+      data: { blocked_by_me: action === "block" }
+    };
+  }
+
+  async getImages(viewerId, profileUserId = viewerId) {
+    const targetId = parseInt(profileUserId, 10);
+    if (!targetId || targetId <= 0) {
+      return { success: 0, message: "A valid profile ID is required" };
+    }
+    const isSelf = parseInt(viewerId, 10) === targetId;
+    if (!isSelf && await blockRepository.isBlockedBetween(viewerId, targetId)) {
+      return { success: 0, message: "This profile is unavailable" };
+    }
+    const privacy = await privacyRepository.getPrivacySettings(targetId);
+    const accepted = isSelf || await interestRepository.hasAcceptedInterest(viewerId, targetId);
+    if (!isSelf && privacy.profile_status !== "active") {
+      return { success: 0, message: "This profile is not currently available" };
+    }
+    if (!isSelf && !accepted && privacy.photo_privacy !== "public") {
+      return { success: 1, data: { profile: [] } };
+    }
+
     const [rows] = await pool.execute(
-      "SELECT image_url FROM user_photos WHERE user_id = $1",
-      [userId]
+      "SELECT image_url FROM user_photos WHERE user_id = $1 ORDER BY id ASC",
+      [targetId]
     );
     const images = rows.map((r) => r.image_url);
     return { success: 1, data: { profile: images } };

@@ -8,6 +8,7 @@
     "dev": "node --watch --watch-path=src src/server.js",
     "check": "node --check src/server.js",
     "test": "node scripts/test_features.js",
+    "test:admin-master-data": "node scripts/test_admin_master_data.js",
     "build": "node scripts/build.js"
   },
   "keywords": [

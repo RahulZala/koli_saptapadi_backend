@@ -57,16 +57,13 @@ class AuthService {
     await userRepository.createOTP(phone, otp, expiresAt);
     // Send OTP via Meta WhatsApp Cloud API (Picdik Marketing gateway - template name passed as parameter: "auth")
     const waRes = await whatsappService.sendAuthOTP(phone, otp, "auth");
+    const whatsappStatus = waRes.success ? waRes.status || "sent" : "failed";
 
     return {
-      success: 1,
-      message: "OTP sent successfully",
-      data: {
-        otp,
-        whatsapp_status: waRes.success ? "sent" : "failed",
-        whatsapp_message: waRes.message,
-        details: waRes.data || waRes.raw
-      }
+      success: waRes.success ? 1 : 0,
+      message: waRes.success
+        ? whatsappStatus === "queued" ? "OTP sent successfully on WhatsApp" : "OTP sent successfully on WhatsApp"
+        : "Failed to send OTP via WhatsApp"
     };
   }
 

@@ -1,9 +1,13 @@
 const pool = require("../config/database");
 const userRepository = require("../repositories/user.repository");
 const shortlistRepository = require("../repositories/shortlist.repository");
+const blockRepository = require("../repositories/block.repository");
+const privacyRepository = require("../repositories/privacy.repository");
 
 class UserService {
   async getDashboardProfiles(userId, filters = {}, page = 1, limit = 20) {
+    await blockRepository.ensureTable();
+    await privacyRepository.ensureColumns();
     page = parseInt(page, 10) || 1;
     limit = parseInt(limit, 10) || 20;
     const offset = (page - 1) * limit;
@@ -37,19 +41,26 @@ class UserService {
         u.id, u.first_name, u.last_name, u.sub_caste, u.dob,
         pd.height, pd.weight, pd.marital_status, pd.diet, pd.manglik,
         mp.occupation, mp.work_city, mp.highest_degree, mp.degree,
-        ua.city_id, ua.district_id, ua.state_id, ua.city,
+        ua.city_id, ua.district_id, ua.state_id, c.name AS city,
         COALESCE(u.photo_privacy, 'public') AS photo_privacy,
         COALESCE(u.phone_visibility, 'on_accept') AS phone_visibility,
-        up.profile, u.is_verified
+        CASE WHEN COALESCE(u.photo_privacy, 'public') = 'public' THEN up.profile ELSE NULL END AS profile,
+        u.is_verified
       FROM users u
       LEFT JOIN physical_details pd ON pd.user_id = u.id
       LEFT JOIN marital_professional_details mp ON mp.user_id = u.id
       LEFT JOIN user_addresses ua ON ua.user_id = u.id AND ua.address_type = 'current'
+      LEFT JOIN cities c ON ua.city_id = c.id
       LEFT JOIN user_document up ON up.user_id = u.id 
       WHERE u.gender = $1
         AND u.document = true
         AND COALESCE(u.profile_status, 'active') = 'active'
         AND u.id != $2
+        AND NOT EXISTS (
+          SELECT 1 FROM user_blocks b
+          WHERE (b.blocker_id = $2 AND b.blocked_id = u.id)
+             OR (b.blocker_id = u.id AND b.blocked_id = $2)
+        )
         AND NOT EXISTS (
           SELECT 1 FROM interests i
           WHERE i.from_user = $3 AND i.to_user = u.id
@@ -80,7 +91,7 @@ class UserService {
       paramIndex++;
     }
     if (filters.city) {
-      sql += ` AND (ua.city ILIKE $${paramIndex} OR mp.work_city ILIKE $${paramIndex})`;
+      sql += ` AND (c.name ILIKE $${paramIndex} OR mp.work_city ILIKE $${paramIndex})`;
       params.push(`%${filters.city}%`);
       paramIndex++;
     }
@@ -211,6 +222,7 @@ class UserService {
       const match = calculateMatch(row, age);
       return {
         ...row,
+        city: row.city || row.work_city || "",
         age,
         is_shortlisted: shortlistedIds.has(row.id),
         match_score: match.score,
@@ -232,7 +244,8 @@ class UserService {
         delete row.dob;
         const match = calculateMatch(row, age);
         return {
-          ...row,
+        ...row,
+        city: row.city || row.work_city || "",
           age,
           is_shortlisted: shortlistedIds.has(row.id),
           match_score: match.score,
@@ -256,17 +269,13 @@ class UserService {
       return { success: 0, message: "Reason for reporting is required" };
     }
 
+    await userRepository.ensureReportTable();
     const existingCount = await userRepository.getReportsCount(fromUserId, toUserId);
     if (existingCount > 0) {
       return { success: 0, message: "You already reported this user" };
     }
 
     await userRepository.createReport(fromUserId, toUserId, reason);
-    const totalReports = await userRepository.getTotalReportsAgainstUser(toUserId);
-
-    if (totalReports > 4) {
-      await userRepository.deactivateUser(toUserId);
-    }
 
     return {
       success: 1,

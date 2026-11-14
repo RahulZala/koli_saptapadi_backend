@@ -1,4 +1,6 @@
 const pool = require("../config/database");
+const blockRepository = require("./block.repository");
+const privacyRepository = require("./privacy.repository");
 
 class ShortlistRepository {
   constructor() {
@@ -66,6 +68,8 @@ class ShortlistRepository {
 
   async getShortlistedProfiles(userId, page = 1, limit = 20) {
     await this.ensureTable();
+    await blockRepository.ensureTable();
+    await privacyRepository.ensureColumns();
     page = parseInt(page, 10) || 1;
     limit = parseInt(limit, 10) || 20;
     const offset = (page - 1) * limit;
@@ -75,7 +79,17 @@ class ShortlistRepository {
         u.id, u.first_name, u.last_name, u.sub_caste, u.dob,
         pd.height, pd.weight, pd.marital_status,
         mp.occupation, mp.work_city,
-        up.profile, u.is_verified,
+        CASE
+          WHEN COALESCE(u.photo_privacy, 'public') = 'public'
+            OR EXISTS (
+              SELECT 1 FROM interests i
+              WHERE i.status = 'accepted'
+                AND ((i.from_user = $1 AND i.to_user = u.id)
+                  OR (i.from_user = u.id AND i.to_user = $1))
+            )
+          THEN up.profile ELSE NULL
+        END AS profile,
+        u.is_verified,
         s.created_at AS shortlisted_at
       FROM user_shortlists s
       INNER JOIN users u ON u.id = s.shortlisted_user_id
@@ -83,6 +97,11 @@ class ShortlistRepository {
       LEFT JOIN marital_professional_details mp ON mp.user_id = u.id
       LEFT JOIN user_document up ON up.user_id = u.id
       WHERE s.user_id = $1
+        AND NOT EXISTS (
+          SELECT 1 FROM user_blocks b
+          WHERE (b.blocker_id = $1 AND b.blocked_id = u.id)
+             OR (b.blocker_id = u.id AND b.blocked_id = $1)
+        )
       ORDER BY s.created_at DESC
       LIMIT $2 OFFSET $3
     `;

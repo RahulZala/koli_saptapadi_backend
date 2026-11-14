@@ -3,7 +3,7 @@ const referralRepository = require("../repositories/referral.repository");
 class ReferralService {
   async getReferralInfo(userId) {
     const summary = await referralRepository.getReferralSummary(userId);
-    const referralCode = `KOLI${userId}`;
+    const referralCode = await referralRepository.getUserReferralCode(userId);
     const shareMessage = `Find your perfect life partner on Koli Saptapadi Matrimony! Use my referral code *${referralCode}* to get 3 free send interests upon joining: https://koli-saptapadi.vercel.app/`;
 
     return {
