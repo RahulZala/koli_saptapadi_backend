@@ -21,8 +21,10 @@ class KundliService {
     const viewerKundli = await kundliRepository.getKundli(viewerId);
     return {
       success: 1,
-      data,
-      comparison: this.compareProfiles(viewerKundli, targetKundli)
+      data: {
+        ...data,
+        comparison: this.compareProfiles(viewerKundli, targetKundli)
+      } 
     };
   }
 
@@ -34,7 +36,8 @@ class KundliService {
     await kundliRepository.saveKundli(userId, clean);
     return {
       success: 1,
-      message: "Kundli and horoscope details saved successfully"
+      message: "Kundli and horoscope details saved successfully",
+      data: { saved: true }
     };
   }
 
