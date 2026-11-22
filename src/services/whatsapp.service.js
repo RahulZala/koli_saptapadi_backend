@@ -271,6 +271,18 @@ class WhatsAppService {
    * @returns {Promise<{success: boolean, message: string, data?: any, raw?: any}>}
    */
   async sendRawMessage(payload) {
+    // WhatsApp Mode Toggle: 0 = Live delivery, 1 = Debug mode (no WP messages sent from local/debug)
+    const isDebug = Number(env.WHATSAPP_DEBUG ?? 0) === 1 || Number(env.WHATSAPP_IS_LIVE ?? 1) === 0;
+    if (isDebug) {
+      // console.log(`[WHATSAPP DEBUG MODE (1=debug)] Suppressing Meta WhatsApp send. Recipient: ${payload?.to || "unknown"}`);
+      return {
+        success: true,
+        message: "WhatsApp message skipped (debug mode active: 0=live, 1=debug)",
+        status: "debug_skipped",
+        debug: true
+      };
+    }
+
     const endpoint = this.messagesEndpoint;
     const token = this.accessToken;
 

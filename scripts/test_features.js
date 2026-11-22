@@ -77,7 +77,7 @@ console.log("✔ Express app & route alias normalizer verified");
         id: 1, sender_id: senderId, receiver_id: receiverId, message
       });
       blockRepository.isBlockedBetween = async (user1, user2) => user1 === 1 && user2 === 9;
-      notificationService.createAndSendNotification = async () => {};
+      notificationService.createAndSendNotification = async () => { };
       pool.execute = async () => [[{ first_name: "Test", last_name: "User" }], null];
 
       const reportedPairMessage = await chatService.sendMessage(1, 2, "Blocked");
@@ -111,9 +111,9 @@ console.log("✔ Express app & route alias normalizer verified");
     };
     let accountDeactivationCalls = 0;
     try {
-      userRepository.ensureReportTable = async () => {};
+      userRepository.ensureReportTable = async () => { };
       userRepository.getReportsCount = async () => 0;
-      userRepository.createReport = async () => {};
+      userRepository.createReport = async () => { };
       userRepository.getTotalReportsAgainstUser = async () => 5;
       userRepository.deactivateUser = async () => {
         accountDeactivationCalls++;
@@ -280,7 +280,7 @@ console.log("✔ Express app & route alias normalizer verified");
         return { id, from_user: 10, to_user: receiverId, status };
       };
       userRepository.findById = async () => ({ first_name: "Request", last_name: "Receiver" });
-      notificationService.createAndSendNotification = async () => {};
+      notificationService.createAndSendNotification = async () => { };
       const acceptedAction = await interestService.manageInterest(999, 22, "accept", 7);
       assert.strictEqual(acceptedAction.success, 1);
       assert.strictEqual(responseReceiverId, 22,
@@ -305,7 +305,7 @@ console.log("✔ Express app & route alias normalizer verified");
     let duplicateRequestLocked = false;
     try {
       interestRepository.schemaReady = Promise.resolve();
-      blockRepository.ensureTable = async () => {};
+      blockRepository.ensureTable = async () => { };
       pool.connect = async () => ({
         query: async (sql) => {
           if (sql.includes("pg_advisory_xact_lock")) duplicateRequestLocked = true;
@@ -316,7 +316,7 @@ console.log("✔ Express app & route alias normalizer verified");
           }
           return { rows: [] };
         },
-        release: () => {}
+        release: () => { }
       });
       const duplicateRequest = await interestRepository.sendInterest(1, 2);
       assert.strictEqual(duplicateRequest.error.includes("already pending"), true,
@@ -437,8 +437,86 @@ console.log("✔ Express app & route alias normalizer verified");
     assert(bioSrc.includes("LEFT JOIN cities c ON ua.city_id = c.id"), "biodata.service.js must join cities c ON ua.city_id = c.id");
     console.log("✔ SQL schema integrity verified: 'ua.city' completely eliminated and 'c.name AS city' correctly joined");
 
+    // Test 12: Admin Email & Password Authentication (No WhatsApp OTP required)
+    console.log("▶ [Test 12] Testing Admin Email & Password Authentication for kolisaptapadi@gmail.com and zalarahul000@gmail.com...");
+    const adminController = require("../src/controllers/admin.controller");
+    const jwt = require("jsonwebtoken");
+    const env = require("../src/config/env");
+
+    const mockRes = () => {
+      const res = {
+        statusCode: 200,
+        body: null,
+        status(code) {
+          this.statusCode = code;
+          return this;
+        },
+        json(data) {
+          this.body = data;
+          return this;
+        }
+      };
+      return res;
+    };
+
+    // Case 1: Unauthorized email
+    const resUnauthorized = mockRes();
+    await adminController.login({ body: { email: "unauthorized@gmail.com", password: env.ADMIN_PASSWORD } }, resUnauthorized);
+    assert.strictEqual(resUnauthorized.statusCode, 403, "Must reject unauthorized email address");
+
+    // Case 2: Wrong password
+    const resWrongPass = mockRes();
+    await adminController.login({ body: { email: "kolisaptapadi@gmail.com", password: "wrong_password" } }, resWrongPass);
+    assert.strictEqual(resWrongPass.statusCode, 401, "Must reject incorrect password");
+
+    // Case 3: Valid login for kolisaptapadi@gmail.com
+    const resAdmin1 = mockRes();
+    await adminController.login({ body: { email: "kolisaptapadi@gmail.com", password: env.ADMIN_PASSWORD } }, resAdmin1);
+    assert.strictEqual(resAdmin1.statusCode, 200, "Must succeed for kolisaptapadi@gmail.com");
+    assert(resAdmin1.body && resAdmin1.body.token, "Must return valid JWT token");
+    const decoded1 = jwt.verify(resAdmin1.body.token, env.ADMIN_JWT_SECRET);
+    assert.strictEqual(decoded1.role, "admin");
+    assert.strictEqual(decoded1.email, "kolisaptapadi@gmail.com");
+
+    // Case 4: Valid login for zalarahul000@gmail.com
+    const resAdmin2 = mockRes();
+    await adminController.login({ body: { email: "zalarahul000@gmail.com", password: env.ADMIN_PASSWORD } }, resAdmin2);
+    assert.strictEqual(resAdmin2.statusCode, 200, "Must succeed for zalarahul000@gmail.com");
+    assert(resAdmin2.body && resAdmin2.body.token, "Must return valid JWT token");
+    const decoded2 = jwt.verify(resAdmin2.body.token, env.ADMIN_JWT_SECRET);
+    assert.strictEqual(decoded2.role, "admin");
+    assert.strictEqual(decoded2.email, "zalarahul000@gmail.com");
+
+    // Case 5: sendOtp with email mapping (kolisaptapadi@gmail.com -> 9760975757, no WhatsApp)
+    const resOtp1 = mockRes();
+    await adminController.sendOtp({ body: { email: "kolisaptapadi@gmail.com" } }, resOtp1);
+    assert.strictEqual(resOtp1.statusCode, 200);
+    assert.strictEqual(resOtp1.body.phone, "9760975757", "Must resolve to 9760975757");
+    assert(resOtp1.body.otp, "Must return generated OTP for easy verify");
+
+    // Case 6: sendOtp with email mapping (zalarahul000@gmail.com -> 7405603337, no WhatsApp)
+    const resOtp2 = mockRes();
+    await adminController.sendOtp({ body: { email: "zalarahul000@gmail.com" } }, resOtp2);
+    assert.strictEqual(resOtp2.statusCode, 200);
+    assert.strictEqual(resOtp2.body.phone, "7405603337", "Must resolve to 7405603337");
+    assert(resOtp2.body.otp, "Must return generated OTP for easy verify");
+
+    // Case 7: verifyOtp with master/password or table OTP
+    const resVerify1 = mockRes();
+    await adminController.verifyOtp({ body: { email: "kolisaptapadi@gmail.com", otp: env.ADMIN_PASSWORD } }, resVerify1);
+    assert.strictEqual(resVerify1.statusCode, 200, "Must verify admin successfully");
+    assert(resVerify1.body.token, "Must return admin token");
+
+    // Case 8: WhatsApp Debug Mode Toggle (0 = live, 1 = debug mode)
+    const whatsappService = require("../src/services/whatsapp.service");
+    const waRes = await whatsappService.sendAuthOTP("9760975757", "123456");
+    assert.strictEqual(waRes.success, true, "Debug mode must succeed without sending actual network WP message");
+    assert.strictEqual(waRes.debug, true, "Must flag debug mode active");
+
+    console.log("✔ Admin email/password login, email-to-phone mapping (9760975757 & 7405603337), table OTP, and WhatsApp debug mode verified");
+
     console.log("\n==================================================");
-    console.log("🎉 ALL 11 UNIT TEST SUITES PASSED WITH ZERO ERRORS!");
+    console.log("🎉 ALL 12 UNIT TEST SUITES PASSED WITH ZERO ERRORS!");
     console.log("==================================================\n");
     process.exit(0);
   } catch (err) {

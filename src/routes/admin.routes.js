@@ -23,6 +23,20 @@ function isAuthorizedPhone(phone) {
   return adminList.some((p) => p === digits || p === phone10 || p === phone12);
 }
 
+function getAdminEmails() {
+  const raw = env.ADMIN_EMAILS || "kolisaptapadi@gmail.com,zalarahul000@gmail.com";
+  return raw
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isAuthorizedEmail(email) {
+  const norm = String(email || "").trim().toLowerCase();
+  if (!norm) return false;
+  return getAdminEmails().includes(norm);
+}
+
 // Middleware to authenticate admin requests
 const authenticateAdmin = (req, res, next) => {
   try {
@@ -34,7 +48,10 @@ const authenticateAdmin = (req, res, next) => {
     }
 
     const payload = jwt.verify(token, env.ADMIN_JWT_SECRET);
-    if (payload.role !== "admin" || !isAuthorizedPhone(payload.phone)) {
+    const isPhoneValid = payload.phone && isAuthorizedPhone(payload.phone);
+    const isEmailValid = payload.email && isAuthorizedEmail(payload.email);
+
+    if (payload.role !== "admin" || (!isPhoneValid && !isEmailValid)) {
       return res.status(401).json({ error: "Unauthorized: Invalid admin credentials" });
     }
 
@@ -46,6 +63,7 @@ const authenticateAdmin = (req, res, next) => {
 };
 
 // Admin Public Auth Routes
+router.post("/auth/login", adminController.login);
 router.post("/auth/send-otp", adminController.sendOtp);
 router.post("/auth/verify-otp", adminController.verifyOtp);
 

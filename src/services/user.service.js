@@ -3,6 +3,7 @@ const userRepository = require("../repositories/user.repository");
 const shortlistRepository = require("../repositories/shortlist.repository");
 const blockRepository = require("../repositories/block.repository");
 const privacyRepository = require("../repositories/privacy.repository");
+const interestRepository = require("../repositories/interest.repository");
 
 class UserService {
   async getDashboardProfiles(userId, filters = {}, page = 1, limit = 20) {
@@ -210,7 +211,9 @@ class UserService {
       };
     };
 
-    let profiles = (rows || []).map((row) => {
+    const enrichProfiles = async (sourceRows) => {
+      const profiles = [];
+      for (const row of sourceRows || []) {
       let age = null;
       if (row.dob) {
         const dobDate = new Date(row.dob);
@@ -220,38 +223,49 @@ class UserService {
       delete row.dob;
 
       const match = calculateMatch(row, age);
-      return {
+        const pairRequests = await interestRepository.getPairRequests(userId, row.id);
+        const accepted = pairRequests.some((request) => request.status === "accepted");
+        const pendingRequest = pairRequests.find((request) => request.status === "pending");
+        const rejectedRequest = pairRequests.find((request) => request.status === "rejected");
+        const relationshipStatus = accepted
+          ? "accepted"
+          : pendingRequest
+            ? "pending"
+            : rejectedRequest
+              ? "rejected"
+              : "none";
+        const requestDirection = pendingRequest
+          ? (parseInt(pendingRequest.from_user, 10) === parseInt(userId, 10) ? "outgoing" : "incoming")
+          : null;
+        const canSendRequest = !accepted &&
+          !pendingRequest &&
+          !pairRequests.some((request) =>
+            request.status === "rejected" &&
+            parseInt(request.from_user, 10) === parseInt(userId, 10)
+          );
+        profiles.push({
         ...row,
         city: row.city || row.work_city || "",
         age,
         is_shortlisted: shortlistedIds.has(row.id),
         match_score: match.score,
-        match_reasons: match.reasons
-      };
-    });
+          match_reasons: match.reasons,
+          relationship_status: relationshipStatus,
+          request_direction: requestDirection,
+          request_id: pendingRequest ? pendingRequest.id : null,
+          can_send_request: canSendRequest
+        });
+      }
+      return profiles;
+    };
+
+    let profiles = await enrichProfiles(rows);
 
     if (profiles.length === 0) {
       // Clear old profile views if no new profiles match (fallback refresh)
       await pool.execute("DELETE FROM profile_views WHERE user_id = $1", [userId]);
       const [retryRows] = await pool.execute(sql, params);
-      profiles = (retryRows || []).map((row) => {
-        let age = null;
-        if (row.dob) {
-          const dobDate = new Date(row.dob);
-          const today = new Date();
-          age = today.getFullYear() - dobDate.getFullYear();
-        }
-        delete row.dob;
-        const match = calculateMatch(row, age);
-        return {
-        ...row,
-        city: row.city || row.work_city || "",
-          age,
-          is_shortlisted: shortlistedIds.has(row.id),
-          match_score: match.score,
-          match_reasons: match.reasons
-        };
-      });
+      profiles = await enrichProfiles(retryRows);
     }
 
     return {

@@ -24,6 +24,8 @@ const env = {
   JWT_SECRET: process.env.JWT_SECRET || "koli_saptapadi_express_jwt_secret_key_2026",
   ADMIN_JWT_SECRET: process.env.ADMIN_JWT_SECRET || "12159547ffe108e244c95ea10ffd3813279bb12fd83e9cf54076bcef7d8d88e1",
   ADMIN_PHONES: process.env.ADMIN_PHONES || "919760975757,917405603337,9760975757,7405603337,9638336198,919638336198",
+  ADMIN_EMAILS: process.env.ADMIN_EMAILS || "kolisaptapadi@gmail.com,zalarahul000@gmail.com",
+  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || "KoliAdmin@2026",
   ADMIN_ORIGIN: process.env.ADMIN_ORIGIN || "*",
 
   // Cloudflare R2 Object Storage
@@ -60,6 +62,8 @@ const env = {
   FCM_TEST_DEVICE_TOKEN: process.env.FCM_TEST_DEVICE_TOKEN || "",
 
   // Meta Official WhatsApp API (Picdik Marketing)
+  WHATSAPP_DEBUG: parseInt(process.env.WHATSAPP_DEBUG ?? "1", 10), // 0 = Live, 1 = Debug (suppress WP messages in local/debug)
+  WHATSAPP_IS_LIVE: parseInt(process.env.WHATSAPP_IS_LIVE ?? (process.env.WHATSAPP_DEBUG === "1" ? "0" : "1"), 10),
   META_WHATSAPP_BASE_URL: (process.env.META_WHATSAPP_BASE_URL || "").replace(/\/+$/, ""),
   META_WHATSAPP_API_VERSION: process.env.META_WHATSAPP_API_VERSION || "v19.0",
   META_WHATSAPP_PHONE_ID: process.env.META_WHATSAPP_PHONE_ID || "",

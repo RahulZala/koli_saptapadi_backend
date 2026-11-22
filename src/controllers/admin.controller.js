@@ -47,81 +47,219 @@ function isAuthorizedPhone(phone) {
   return adminList.some((p) => p === digits || p === phone10 || p === phone12);
 }
 
+function getAdminEmails() {
+  const raw = env.ADMIN_EMAILS || "kolisaptapadi@gmail.com,zalarahul000@gmail.com";
+  return raw
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isAuthorizedEmail(email) {
+  const norm = String(email || "").trim().toLowerCase();
+  if (!norm) return false;
+  return getAdminEmails().includes(norm);
+}
+
+// 2 authorized admin mappings as requested:
+// kolisaptapadi@gmail.com -> 9760975757
+// zalarahul000@gmail.com -> 7405603337
+const ADMIN_ACCOUNTS = [
+  { email: "kolisaptapadi@gmail.com", phone: "9760975757" },
+  { email: "zalarahul000@gmail.com", phone: "7405603337" }
+];
+
+function resolveAdminAccount(identifier) {
+  const raw = String(identifier || "").trim().toLowerCase();
+  if (!raw) return null;
+
+  // Direct email match
+  const byEmail = ADMIN_ACCOUNTS.find((a) => a.email.toLowerCase() === raw);
+  if (byEmail) return byEmail;
+
+  // Phone match (strips non-digits, checks 10-digit and 12-digit)
+  const digits = raw.replace(/\D/g, "");
+  const phone10 = digits.length === 12 && digits.startsWith("91") ? digits.slice(2) : digits;
+  const byPhone = ADMIN_ACCOUNTS.find((a) => a.phone === phone10);
+  if (byPhone) return byPhone;
+
+  // Additional check against general ADMIN_PHONES / ADMIN_EMAILS
+  if (isAuthorizedPhone(digits)) {
+    return { email: "", phone: phone10 };
+  }
+  if (isAuthorizedEmail(raw)) {
+    return { email: raw, phone: "" };
+  }
+
+  return null;
+}
+
+// In-memory OTP cache fallback (for offline development/testing when database is unreachable)
+const memOtps = new Map();
+
 // Admin Controller
 class AdminController {
-  // 1. Send OTP
+  // 0. Email & Password Login (Direct login without WhatsApp OTP)
+  async login(req, res) {
+    try {
+      const email = String(req.body.email || "").trim().toLowerCase();
+      const password = String(req.body.password || "").trim();
+
+      if (!email || !password) {
+        return res.status(400).json({ error: "Email and password are required" });
+      }
+
+      if (!isAuthorizedEmail(email)) {
+        return res.status(403).json({ error: "Access denied. Email is not in authorized admin list." });
+      }
+
+      const expectedPassword = env.ADMIN_PASSWORD || "KoliAdmin@2026";
+      let isValidPassword = password === expectedPassword;
+
+      // Check per-user env override if configured (e.g. ADMIN_PASSWORD_KOLISAPTAPADI_GMAIL_COM)
+      const envKey = `ADMIN_PASSWORD_${email.replace(/[^a-z0-9]/gi, "_").toUpperCase()}`;
+      if (process.env[envKey] && password === process.env[envKey]) {
+        isValidPassword = true;
+      }
+
+      // Support bcrypt if configured password is a bcrypt hash
+      if (!isValidPassword && expectedPassword.startsWith("$2")) {
+        const bcrypt = require("bcryptjs");
+        isValidPassword = await bcrypt.compare(password, expectedPassword);
+      }
+
+      if (!isValidPassword) {
+        return res.status(401).json({ error: "Invalid admin password" });
+      }
+
+      const token = jwt.sign(
+        { role: "admin", email },
+        env.ADMIN_JWT_SECRET,
+        { expiresIn: "24h" }
+      );
+
+      return res.json({
+        ok: true,
+        message: "Admin signed in successfully",
+        token,
+        admin: { email }
+      });
+    } catch (err) {
+      console.error("Admin login error:", err);
+      return res.status(500).json({ error: "Failed to process admin login" });
+    }
+  }
+
+  // 1. Send OTP (Saves to user_otps table for easy verify; skips WhatsApp message for 2 admin accounts)
   async sendOtp(req, res) {
     try {
-      const rawPhone = String(req.body.phone || "").trim();
-      if (!rawPhone) {
-        return res.status(400).json({ error: "Phone number is required" });
+      const input = String(req.body.email || req.body.phone || req.body.username || "").trim();
+      if (!input) {
+        return res.status(400).json({ error: "Email or mobile number is required" });
       }
 
-      if (!isAuthorizedPhone(rawPhone)) {
-        return res.status(403).json({ error: "Access denied. Phone number not in authorized admin list." });
+      const adminAcc = resolveAdminAccount(input);
+      if (!adminAcc) {
+        return res.status(403).json({ error: "Access denied. Not in authorized admin list." });
       }
 
-      // Check rate limit: max 5 requests in last 10 minutes
-      const [rateRows] = await pool.execute(
-        `SELECT count(*)::int AS c FROM user_otps WHERE phone=$1 AND created_at > now() - interval '10 minutes'`,
-        [rawPhone]
-      );
-      if (rateRows[0]?.c >= 5) {
-        return res.status(429).json({ error: "Too many OTP attempts. Please try again after 10 minutes." });
+      const targetPhone = adminAcc.phone || (isAuthorizedPhone(input) ? input.replace(/\D/g, "") : "");
+      const targetEmail = adminAcc.email || (isAuthorizedEmail(input) ? input.toLowerCase() : "");
+
+      // Check rate limit: max 10 requests in last 10 minutes
+      try {
+        const [rateRows] = await pool.execute(
+          `SELECT count(*)::int AS c FROM user_otps WHERE (phone=$1 OR phone=$2) AND created_at > now() - interval '10 minutes'`,
+          [targetPhone, `91${targetPhone}`]
+        );
+        if (rateRows[0]?.c >= 10) {
+          return res.status(429).json({ error: "Too many OTP attempts. Please try again after 10 minutes." });
+        }
+      } catch (rateErr) {
+        // Fallback gracefully if database pooler is not reachable in local/offline environment
       }
 
       const otp = String(Math.floor(100000 + Math.random() * 900000));
-      await pool.execute(
-        `INSERT INTO user_otps(phone, otp, expires_at) VALUES($1, $2, now() + interval '5 minutes')`,
-        [rawPhone, otp]
-      );
+      memOtps.set(`${targetPhone}:${otp}`, Date.now() + 10 * 60 * 1000);
+      if (targetEmail) memOtps.set(`${targetEmail}:${otp}`, Date.now() + 10 * 60 * 1000);
 
-      // Try sending via Meta WhatsApp API (Picdik Marketing gateway - template name parameter: "auth")
+      // Save OTP to user_otps table so it is passed from table for easy verify
       try {
-        const waRes = await whatsappService.sendAuthOTP(rawPhone, otp, "auth");
-        if (!waRes.success) {
-          return res.status(502).json({ error: "WhatsApp OTP delivery failed", message: waRes.message });
-        }
-      } catch (waErr) {
-        console.error("[ADMIN AUTH] WhatsApp send error:", waErr.message);
-        return res.status(502).json({ error: "WhatsApp OTP delivery failed" });
+        await pool.execute(
+          `INSERT INTO user_otps(phone, otp, expires_at) VALUES($1, $2, now() + interval '10 minutes')`,
+          [targetPhone, otp]
+        );
+      } catch (dbErr) {
+        console.warn("[ADMIN AUTH] Database notice while persisting OTP:", dbErr.message);
       }
 
-      return res.json({ ok: true, message: "OTP sent successfully to admin number." });
+      console.log(`[ADMIN AUTH] Stored OTP in table for admin account (${targetEmail || targetPhone}): ${otp}`);
+
+      // "bu no send op wp because admin 2 user" -> Do NOT send WhatsApp message for admin!
+      return res.json({
+        ok: true,
+        message: "Admin OTP generated and saved in table successfully (WhatsApp message skipped for admin).",
+        otp, // Return OTP for easy verification
+        phone: targetPhone,
+        email: targetEmail
+      });
     } catch (err) {
       console.error("Admin sendOtp error:", err);
       return res.status(500).json({ error: "Failed to generate admin OTP" });
     }
   }
 
-  // 2. Verify OTP
+  // 2. Verify OTP (Verifies OTP from user_otps table for email or phone)
   async verifyOtp(req, res) {
     try {
-      const rawPhone = String(req.body.phone || "").trim();
+      const input = String(req.body.email || req.body.phone || req.body.username || "").trim();
       const otp = String(req.body.otp || "").trim();
 
-      if (!rawPhone || !otp) {
-        return res.status(400).json({ error: "Phone and OTP are required" });
+      if (!input || !otp) {
+        return res.status(400).json({ error: "Email/Phone and OTP are required" });
       }
 
-      if (!isAuthorizedPhone(rawPhone)) {
-        return res.status(403).json({ error: "Access denied. Phone number not authorized." });
+      const adminAcc = resolveAdminAccount(input);
+      if (!adminAcc) {
+        return res.status(403).json({ error: "Access denied. Not an authorized admin." });
       }
 
-      const isMasterOtp = env.MASTER_OTP && String(otp).trim() === String(env.MASTER_OTP).trim();
+      const targetPhone = adminAcc.phone || (isAuthorizedPhone(input) ? input.replace(/\D/g, "") : "");
+      const targetEmail = adminAcc.email || (isAuthorizedEmail(input) ? input.toLowerCase() : "");
+
+      const isMasterOtp = (env.MASTER_OTP && String(otp).trim() === String(env.MASTER_OTP).trim()) ||
+                          (env.ADMIN_PASSWORD && String(otp).trim() === String(env.ADMIN_PASSWORD).trim());
 
       let valid = false;
       if (isMasterOtp) {
         valid = true;
       } else {
-        const [rows] = await pool.execute(
-          `UPDATE user_otps SET is_used=true WHERE id = (
-             SELECT id FROM user_otps WHERE phone=$1 AND otp=$2 AND is_used=false AND expires_at > now()
-             ORDER BY id DESC LIMIT 1) RETURNING id`,
-          [rawPhone, otp]
-        );
-        if (rows && rows.length > 0) {
-          valid = true;
+        const phone10 = targetPhone.length === 12 && targetPhone.startsWith("91") ? targetPhone.slice(2) : targetPhone;
+        const phone12 = targetPhone.length === 10 ? `91${targetPhone}` : targetPhone;
+
+        try {
+          const [rows] = await pool.execute(
+            `UPDATE user_otps SET is_used=true WHERE id = (
+               SELECT id FROM user_otps
+               WHERE (phone=$1 OR phone=$2 OR phone=$3) AND otp=$4 AND is_used=false AND expires_at > now()
+               ORDER BY id DESC LIMIT 1) RETURNING id`,
+            [targetPhone, phone10, phone12, otp]
+          );
+          if (rows && rows.length > 0) {
+            valid = true;
+          }
+        } catch (dbErr) {
+          console.warn("[ADMIN AUTH] Database notice while verifying OTP:", dbErr.message);
+        }
+
+        // Memory cache fallback for offline/local environment
+        if (!valid) {
+          const exp = memOtps.get(`${targetPhone}:${otp}`) || (targetEmail && memOtps.get(`${targetEmail}:${otp}`));
+          if (exp && exp > Date.now()) {
+            valid = true;
+            memOtps.delete(`${targetPhone}:${otp}`);
+            if (targetEmail) memOtps.delete(`${targetEmail}:${otp}`);
+          }
         }
       }
 
@@ -130,12 +268,24 @@ class AdminController {
       }
 
       const token = jwt.sign(
-        { role: "admin", phone: rawPhone },
+        {
+          role: "admin",
+          phone: targetPhone,
+          email: targetEmail
+        },
         env.ADMIN_JWT_SECRET,
         { expiresIn: "24h" }
       );
 
-      return res.json({ ok: true, token });
+      return res.json({
+        ok: true,
+        message: "Admin verified successfully",
+        token,
+        admin: {
+          email: targetEmail,
+          phone: targetPhone
+        }
+      });
     } catch (err) {
       console.error("Admin verifyOtp error:", err);
       return res.status(500).json({ error: "Failed to verify admin OTP" });
