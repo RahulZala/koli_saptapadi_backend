@@ -59,8 +59,150 @@ apiRoutes.forEach(router => {
   app.use("/api", router);
 });
 
-// Root & API Healthcheck Endpoints (supports GET and POST)
-app.all(["/health", "/api/health", "/api/calls/health", "/"], async (req, res) => {
+// Root Endpoint - Serve HTML Status Page with Vercel Analytics
+app.get("/", async (req, res) => {
+  let dbStatus = "connected";
+  let dbError = null;
+
+  try {
+    const pool = require("./config/database");
+    await pool.query("SELECT 1");
+  } catch (err) {
+    dbStatus = "disconnected";
+    dbError = err.message;
+  }
+
+  const statusColor = dbStatus === "connected" ? "#10b981" : "#ef4444";
+  const timestamp = new Date().toISOString();
+
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Koli Saptapadi API Status</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      padding: 40px;
+      max-width: 600px;
+      width: 100%;
+    }
+    h1 {
+      color: #1f2937;
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: #6b7280;
+      font-size: 16px;
+      margin-bottom: 32px;
+    }
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      background: #f9fafb;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .status-label {
+      color: #374151;
+      font-weight: 500;
+      font-size: 14px;
+    }
+    .status-value {
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .badge-success {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    .badge-error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    .info-text {
+      color: #6b7280;
+      font-size: 12px;
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid #e5e7eb;
+    }
+    .analytics-note {
+      margin-top: 16px;
+      padding: 12px;
+      background: #eff6ff;
+      border-left: 4px solid #3b82f6;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #1e40af;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎉 API is Running</h1>
+    <p class="subtitle">Koli Saptapadi Express REST API</p>
+    
+    <div class="status-row">
+      <span class="status-label">Status</span>
+      <span class="badge badge-success">ONLINE</span>
+    </div>
+    
+    <div class="status-row">
+      <span class="status-label">Database</span>
+      <span class="badge ${dbStatus === 'connected' ? 'badge-success' : 'badge-error'}">${dbStatus.toUpperCase()}</span>
+    </div>
+    
+    <div class="status-row">
+      <span class="status-label">Last Checked</span>
+      <span class="status-value">${timestamp}</span>
+    </div>
+
+    <div class="analytics-note">
+      ℹ️ <strong>Vercel Web Analytics Enabled:</strong> This page tracks visitor analytics via Vercel. API endpoints remain JSON-based.
+    </div>
+    
+    <p class="info-text">
+      <strong>API Base URL:</strong> /api/calls<br>
+      <strong>Documentation:</strong> See README.md for endpoint details<br>
+      <strong>Health Check (JSON):</strong> /health, /api/health
+    </p>
+  </div>
+  
+  <script>
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/insights/script.js"></script>
+</body>
+</html>`);
+});
+
+// Health Check Endpoints (JSON response)
+app.all(["/health", "/api/health", "/api/calls/health"], async (req, res) => {
   let dbStatus = "connected";
   let dbError = null;
 
