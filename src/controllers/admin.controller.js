@@ -97,9 +97,63 @@ function resolveAdminAccount(identifier) {
 // In-memory OTP cache fallback (for offline development/testing when database is unreachable)
 const memOtps = new Map();
 
+async function createAndSendAdminOtp(adminAcc) {
+  const targetPhone = adminAcc.phone || "";
+  const targetEmail = adminAcc.email || "";
+
+  try {
+    const [rateRows] = await pool.execute(
+      `SELECT count(*)::int AS c FROM user_otps WHERE (phone=$1 OR phone=$2) AND created_at > now() - interval '10 minutes'`,
+      [targetPhone, `91${targetPhone}`]
+    );
+    if (rateRows[0]?.c >= 10) {
+      return { success: false, status: 429, error: "Too many OTP attempts. Please try again after 10 minutes." };
+    }
+  } catch (rateErr) {
+    // Fallback gracefully if database pooler is not reachable in local/offline environment
+  }
+
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  memOtps.set(`${targetPhone}:${otp}`, Date.now() + 10 * 60 * 1000);
+  if (targetEmail) memOtps.set(`${targetEmail}:${otp}`, Date.now() + 10 * 60 * 1000);
+
+  try {
+    await pool.execute(
+      `INSERT INTO user_otps(phone, otp, expires_at) VALUES($1, $2, now() + interval '10 minutes')`,
+      [targetPhone, otp]
+    );
+  } catch (dbErr) {
+    console.warn("[ADMIN AUTH] Database notice while persisting OTP:", dbErr.message);
+  }
+
+  if (!targetPhone) {
+    return { success: false, status: 400, error: "Admin mobile number is not configured." };
+  }
+
+  const whatsappResult = await whatsappService.sendAuthOTP(targetPhone, otp, "auth");
+  if (!whatsappResult.success) {
+    console.error("[ADMIN AUTH] Failed to send WhatsApp OTP:", whatsappResult.message);
+    return {
+      success: false,
+      status: 502,
+      error: "Failed to send OTP via WhatsApp",
+      detail: whatsappResult.message
+    };
+  }
+
+  console.log(`[ADMIN AUTH] WhatsApp OTP sent for admin account (${targetEmail || targetPhone})`);
+
+  return {
+    success: true,
+    phone: targetPhone,
+    email: targetEmail,
+    delivery: whatsappResult.status || "sent"
+  };
+}
+
 // Admin Controller
 class AdminController {
-  // 0. Email & Password Login (Direct login without WhatsApp OTP)
+  // 0. Email & Password Login (starts WhatsApp OTP verification)
   async login(req, res) {
     try {
       const email = String(req.body.email || "").trim().toLowerCase();
@@ -132,17 +186,21 @@ class AdminController {
         return res.status(401).json({ error: "Invalid admin password" });
       }
 
-      const token = jwt.sign(
-        { role: "admin", email },
-        env.ADMIN_JWT_SECRET,
-        { expiresIn: "24h" }
-      );
+      const adminAcc = resolveAdminAccount(email);
+      if (!adminAcc) {
+        return res.status(403).json({ error: "Access denied. Admin account is not configured." });
+      }
+
+      const otpResult = await createAndSendAdminOtp(adminAcc);
+      if (!otpResult.success) {
+        return res.status(otpResult.status).json({ error: otpResult.error, detail: otpResult.detail });
+      }
 
       return res.json({
         ok: true,
-        message: "Admin signed in successfully",
-        token,
-        admin: { email }
+        otpRequired: true,
+        message: "OTP sent successfully on WhatsApp",
+        admin: { email, phone: otpResult.phone }
       });
     } catch (err) {
       console.error("Admin login error:", err);
@@ -150,7 +208,7 @@ class AdminController {
     }
   }
 
-  // 1. Send OTP (Saves to user_otps table for easy verify; skips WhatsApp message for 2 admin accounts)
+  // 1. Send OTP (Saves and sends the OTP to the configured admin WhatsApp number)
   async sendOtp(req, res) {
     try {
       const input = String(req.body.email || req.body.phone || req.body.username || "").trim();
@@ -166,42 +224,17 @@ class AdminController {
       const targetPhone = adminAcc.phone || (isAuthorizedPhone(input) ? input.replace(/\D/g, "") : "");
       const targetEmail = adminAcc.email || (isAuthorizedEmail(input) ? input.toLowerCase() : "");
 
-      // Check rate limit: max 10 requests in last 10 minutes
-      try {
-        const [rateRows] = await pool.execute(
-          `SELECT count(*)::int AS c FROM user_otps WHERE (phone=$1 OR phone=$2) AND created_at > now() - interval '10 minutes'`,
-          [targetPhone, `91${targetPhone}`]
-        );
-        if (rateRows[0]?.c >= 10) {
-          return res.status(429).json({ error: "Too many OTP attempts. Please try again after 10 minutes." });
-        }
-      } catch (rateErr) {
-        // Fallback gracefully if database pooler is not reachable in local/offline environment
+      const otpResult = await createAndSendAdminOtp({ email: targetEmail, phone: targetPhone });
+      if (!otpResult.success) {
+        return res.status(otpResult.status).json({ error: otpResult.error, detail: otpResult.detail });
       }
 
-      const otp = String(Math.floor(100000 + Math.random() * 900000));
-      memOtps.set(`${targetPhone}:${otp}`, Date.now() + 10 * 60 * 1000);
-      if (targetEmail) memOtps.set(`${targetEmail}:${otp}`, Date.now() + 10 * 60 * 1000);
-
-      // Save OTP to user_otps table so it is passed from table for easy verify
-      try {
-        await pool.execute(
-          `INSERT INTO user_otps(phone, otp, expires_at) VALUES($1, $2, now() + interval '10 minutes')`,
-          [targetPhone, otp]
-        );
-      } catch (dbErr) {
-        console.warn("[ADMIN AUTH] Database notice while persisting OTP:", dbErr.message);
-      }
-
-      console.log(`[ADMIN AUTH] Stored OTP in table for admin account (${targetEmail || targetPhone}): ${otp}`);
-
-      // "bu no send op wp because admin 2 user" -> Do NOT send WhatsApp message for admin!
       return res.json({
         ok: true,
-        message: "Admin OTP generated and saved in table successfully (WhatsApp message skipped for admin).",
-        otp, // Return OTP for easy verification
-        phone: targetPhone,
-        email: targetEmail
+        otpRequired: true,
+        message: "OTP sent successfully on WhatsApp",
+        phone: otpResult.phone,
+        email: otpResult.email
       });
     } catch (err) {
       console.error("Admin sendOtp error:", err);

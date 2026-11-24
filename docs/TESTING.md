@@ -65,6 +65,11 @@ curl -X POST http://localhost:3000/api/calls/get_districts \
 
 ### Admin master-data management
 
+Admin login is a two-step WhatsApp OTP flow:
+
+1. `POST /api/admin/auth/login` with email and password. A successful password check sends an OTP to the admin's configured WhatsApp number.
+2. `POST /api/admin/auth/verify-otp` with the same email and received OTP. The response contains the admin JWT.
+
 The admin token is returned by `/api/admin/auth/verify-otp`. Use it for these protected endpoints:
 
 ```text

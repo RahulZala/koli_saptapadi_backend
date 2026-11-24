@@ -437,7 +437,7 @@ console.log("✔ Express app & route alias normalizer verified");
     assert(bioSrc.includes("LEFT JOIN cities c ON ua.city_id = c.id"), "biodata.service.js must join cities c ON ua.city_id = c.id");
     console.log("✔ SQL schema integrity verified: 'ua.city' completely eliminated and 'c.name AS city' correctly joined");
 
-    // Test 12: Admin Email & Password Authentication (No WhatsApp OTP required)
+    // Test 12: Admin Email & Password Authentication (starts WhatsApp OTP)
     console.log("▶ [Test 12] Testing Admin Email & Password Authentication for kolisaptapadi@gmail.com and zalarahul000@gmail.com...");
     const adminController = require("../src/controllers/admin.controller");
     const jwt = require("jsonwebtoken");
@@ -473,33 +473,29 @@ console.log("✔ Express app & route alias normalizer verified");
     const resAdmin1 = mockRes();
     await adminController.login({ body: { email: "kolisaptapadi@gmail.com", password: env.ADMIN_PASSWORD } }, resAdmin1);
     assert.strictEqual(resAdmin1.statusCode, 200, "Must succeed for kolisaptapadi@gmail.com");
-    assert(resAdmin1.body && resAdmin1.body.token, "Must return valid JWT token");
-    const decoded1 = jwt.verify(resAdmin1.body.token, env.ADMIN_JWT_SECRET);
-    assert.strictEqual(decoded1.role, "admin");
-    assert.strictEqual(decoded1.email, "kolisaptapadi@gmail.com");
+    assert(resAdmin1.body && resAdmin1.body.otpRequired, "Must require OTP after password login");
+    assert(!resAdmin1.body.token, "Must not return JWT before OTP verification");
 
     // Case 4: Valid login for zalarahul000@gmail.com
     const resAdmin2 = mockRes();
     await adminController.login({ body: { email: "zalarahul000@gmail.com", password: env.ADMIN_PASSWORD } }, resAdmin2);
     assert.strictEqual(resAdmin2.statusCode, 200, "Must succeed for zalarahul000@gmail.com");
-    assert(resAdmin2.body && resAdmin2.body.token, "Must return valid JWT token");
-    const decoded2 = jwt.verify(resAdmin2.body.token, env.ADMIN_JWT_SECRET);
-    assert.strictEqual(decoded2.role, "admin");
-    assert.strictEqual(decoded2.email, "zalarahul000@gmail.com");
+    assert(resAdmin2.body && resAdmin2.body.otpRequired, "Must require OTP after password login");
+    assert(!resAdmin2.body.token, "Must not return JWT before OTP verification");
 
-    // Case 5: sendOtp with email mapping (kolisaptapadi@gmail.com -> 9760975757, no WhatsApp)
+    // Case 5: sendOtp with email mapping (kolisaptapadi@gmail.com -> 9760975757)
     const resOtp1 = mockRes();
     await adminController.sendOtp({ body: { email: "kolisaptapadi@gmail.com" } }, resOtp1);
     assert.strictEqual(resOtp1.statusCode, 200);
     assert.strictEqual(resOtp1.body.phone, "9760975757", "Must resolve to 9760975757");
-    assert(resOtp1.body.otp, "Must return generated OTP for easy verify");
+    assert(!resOtp1.body.otp, "Must not expose OTP in API response");
 
-    // Case 6: sendOtp with email mapping (zalarahul000@gmail.com -> 7405603337, no WhatsApp)
+    // Case 6: sendOtp with email mapping (zalarahul000@gmail.com -> 7405603337)
     const resOtp2 = mockRes();
     await adminController.sendOtp({ body: { email: "zalarahul000@gmail.com" } }, resOtp2);
     assert.strictEqual(resOtp2.statusCode, 200);
     assert.strictEqual(resOtp2.body.phone, "7405603337", "Must resolve to 7405603337");
-    assert(resOtp2.body.otp, "Must return generated OTP for easy verify");
+    assert(!resOtp2.body.otp, "Must not expose OTP in API response");
 
     // Case 7: verifyOtp with master/password or table OTP
     const resVerify1 = mockRes();
